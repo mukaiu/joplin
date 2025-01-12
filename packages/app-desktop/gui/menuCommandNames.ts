@@ -20,6 +20,7 @@ export default function() {
 		'setTags',
 		'showLocalSearch',
 		'showNoteContentProperties',
+		'permanentlyDeleteNote',
 		'synchronize',
 		'textBold',
 		'textCode',
@@ -33,6 +34,7 @@ export default function() {
 		'toggleExternalEditing',
 		'toggleLayoutMoveMode',
 		'resetLayout',
+		'toggleMenuBar',
 		'toggleNoteList',
 		'toggleNotesSortOrderField',
 		'toggleNotesSortOrderReverse',
@@ -54,6 +56,7 @@ export default function() {
 		'editor.sortSelectedLines',
 		'editor.swapLineUp',
 		'editor.swapLineDown',
+		'exportDeletionLog',
 		'toggleSafeMode',
 		'showShareNoteDialog',
 		'showShareFolderDialog',
@@ -67,5 +70,6 @@ export default function() {
 		'switchProfile2',
 		'switchProfile3',
 		'pasteAsText',
+		'showNoteProperties',
 	];
 }

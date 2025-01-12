@@ -3,6 +3,7 @@
 // (Desktop|Mobile|Android|iOS[CLI): (New|Improved|Fixed): Some message..... (#ISSUE)
 
 import { execCommand, githubUsername } from './tool-utils';
+import { compareVersions } from 'compare-versions';
 
 interface LogEntry {
 	message: string;
@@ -12,7 +13,11 @@ interface LogEntry {
 }
 
 enum Platform {
+	Unknown = 'unknown',
 	Android = 'android',
+	Windows = 'windows',
+	MacOs = 'macos',
+	Linux = 'linux',
 	Ios = 'ios',
 	Desktop = 'desktop',
 	Clipper = 'clipper',
@@ -81,12 +86,20 @@ async function gitLog(sinceTag: string) {
 
 async function gitTags() {
 	const lines: string = await execCommand('git tag --sort=committerdate');
-	return lines.split('\n').map(l => l.trim()).filter(l => !!l);
+	const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+	return lines
+		.split('\n')
+		.map(l => l.trim())
+		.filter(l => !!l)
+		.sort((a, b) => collator.compare(a, b));
 }
 
 function platformFromTag(tagName: string): Platform {
 	if (tagName.indexOf('v') === 0) return Platform.Desktop;
 	if (tagName.indexOf('android') >= 0) return Platform.Android;
+	if (tagName.indexOf('windows') >= 0) return Platform.Windows;
+	if (tagName.indexOf('linux') >= 0) return Platform.Linux;
+	if (tagName.indexOf('macos') >= 0) return Platform.MacOs;
 	if (tagName.indexOf('ios') >= 0) return Platform.Ios;
 	if (tagName.indexOf('clipper') === 0) return Platform.Clipper;
 	if (tagName.indexOf('cli') === 0) return Platform.Cli;
@@ -94,11 +107,12 @@ function platformFromTag(tagName: string): Platform {
 	if (tagName.indexOf('cloud') === 0) return Platform.Cloud;
 	if (tagName.indexOf('plugin-generator') === 0) return Platform.PluginGenerator;
 	if (tagName.indexOf('plugin-repo-cli') === 0) return Platform.PluginRepoCli;
-	throw new Error(`Could not determine platform from tag: "${tagName}"`);
+	return Platform.Unknown;
+	// throw new Error(`Could not determine platform from tag: "${tagName}"`);
 }
 
 export const filesApplyToPlatform = (files: string[], platform: string): boolean => {
-	const isMainApp = ['android', 'ios', 'desktop', 'cli', 'server'].includes(platform);
+	const isMainApp = ['android', 'ios', 'windows', 'linux', 'macos', 'desktop', 'cli', 'server'].includes(platform);
 	const isMobile = ['android', 'ios'].includes(platform);
 
 	for (const file of files) {
@@ -130,6 +144,7 @@ export const parseRenovateMessage = (message: string): RenovateMessage => {
 	const regexes = [
 		/^Update dependency ([^\s]+) to ([^\s]+)/,
 		/^Update ([^\s]+) monorepo to ([^\s]+)/,
+		/^Update ([^\s]+)/,
 	];
 
 	for (const regex of regexes) {
@@ -138,7 +153,7 @@ export const parseRenovateMessage = (message: string): RenovateMessage => {
 		if (m) {
 			return {
 				package: m[1],
-				version: m[2],
+				version: m.length >= 3 ? m[2] : '',
 			};
 		}
 	}
@@ -150,29 +165,33 @@ export const summarizeRenovateMessages = (messages: RenovateMessage[]): string =
 	// Exclude some dev dependencies
 	messages = messages.filter(m => {
 		if ([
-			'yeoman-generator',
-			'madge',
+			'@electron/notarize',
+			'eslint',
+			'gettext-extractor',
+			'gettext-parser',
+			'jest',
 			'lint-staged',
-			'gettext-extractor',
-			'gettext-extractor',
+			'madge',
 			'ts-jest',
+			'ts-loader',
 			'ts-node',
 			'typescript',
-			'eslint',
-			'jest',
+			'yeoman-generator',
+			'nodemon',
 		].includes(m.package)) {
 			return false;
 		}
 
 		if (m.package.startsWith('@types/')) return false;
 		if (m.package.startsWith('typescript-')) return false;
+		if (m.package.startsWith('@testing-')) return false;
 
 		return true;
 	});
 
 	const temp: Record<string, string> = {};
 	for (const message of messages) {
-		if (!temp[message.package]) {
+		if (!(message.package in temp)) {
 			temp[message.package] = message.version;
 		} else {
 			if (message.version > temp[message.package]) {
@@ -183,7 +202,8 @@ export const summarizeRenovateMessages = (messages: RenovateMessage[]): string =
 
 	const temp2: string[] = [];
 	for (const [pkg, version] of Object.entries(temp)) {
-		temp2.push(`${pkg} (${version})`);
+		const versionString = version ? ` (${version})` : '';
+		temp2.push(`${pkg}${versionString}`);
 	}
 
 	temp2.sort();
@@ -191,6 +211,11 @@ export const summarizeRenovateMessages = (messages: RenovateMessage[]): string =
 	if (temp2.length) return `Updated packages ${temp2.join(', ')}`;
 
 	return '';
+};
+
+const versionFromTag = (tag: string) => {
+	const s = tag.split('-');
+	return s[s.length - 1];
 };
 
 function filterLogs(logs: LogEntry[], platform: Platform) {
@@ -235,7 +260,7 @@ function filterLogs(logs: LogEntry[], platform: Platform) {
 		if (platform === 'android' && prefix.indexOf('android') >= 0) addIt = true;
 		if (platform === 'ios' && prefix.indexOf('ios') >= 0) addIt = true;
 		if (platform === 'desktop' && prefix.indexOf('desktop') >= 0) addIt = true;
-		if (platform === 'desktop' && (prefix.indexOf('desktop') >= 0 || prefix.indexOf('api') >= 0 || prefix.indexOf('plugins') >= 0 || prefix.indexOf('macos') >= 0)) addIt = true;
+		if (platform === 'desktop' && (prefix.indexOf('desktop') >= 0 || prefix.indexOf('api') >= 0 || prefix.indexOf('plugins') >= 0 || prefix.indexOf('macos') >= 0 || prefix.indexOf('windows') >= 0 || prefix.indexOf('linux') >= 0)) addIt = true;
 		if (platform === 'cli' && prefix.indexOf('cli') >= 0) addIt = true;
 		if (platform === 'clipper' && prefix.indexOf('clipper') >= 0) addIt = true;
 		if (platform === 'server' && prefix.indexOf('server') >= 0) addIt = true;
@@ -250,7 +275,9 @@ function filterLogs(logs: LogEntry[], platform: Platform) {
 		// but that's not useful in a changelog especially since most people
 		// don't know country and language codes. So we catch all these and
 		// bundle them all up in a single "Updated translations" at the end.
-		if (log.message.match(/Translation:\sUpdate\s.*?(\.po|[a-zA-Z][a-zA-Z]|[a-zA-Z][a-zA-Z]_[a-zA-Z][a-zA-Z])/)) {
+		if (log.message.match(/Translation:\sUpdate\s.*?(\.po|[a-zA-Z][a-zA-Z]|[a-zA-Z][a-zA-Z]_[a-zA-Z][a-zA-Z])/)
+			|| log.message.match(/Update.+\.po/)
+		) {
 			// updatedTranslations = true;
 			addIt = false;
 		}
@@ -280,7 +307,7 @@ function filterLogs(logs: LogEntry[], platform: Platform) {
 }
 
 function formatCommitMessage(commit: string, msg: string, author: Author, options: Options): string {
-	options = Object.assign({}, { publishFormat: 'full' }, options);
+	options = { publishFormat: 'full', ...options };
 
 	let output = '';
 
@@ -291,7 +318,7 @@ function formatCommitMessage(commit: string, msg: string, author: Author, option
 	const isPlatformPrefix = (prefixString: string) => {
 		const prefix = prefixString.split(',').map(p => p.trim().toLowerCase());
 		for (const p of prefix) {
-			if (['android', 'mobile', 'ios', 'desktop', 'cli', 'clipper', 'all', 'api', 'plugins', 'server', 'cloud'].indexOf(p) >= 0) return true;
+			if (['android', 'mobile', 'ios', 'desktop', 'windows', 'linux', 'macos', 'cli', 'clipper', 'all', 'api', 'plugins', 'server', 'cloud'].indexOf(p) >= 0) return true;
 		}
 		return false;
 	};
@@ -441,10 +468,13 @@ function capitalizeFirstLetter(string: string) {
 async function findFirstRelevantTag(baseTag: string, platform: Platform, allTags: string[]) {
 	let baseTagIndex = allTags.indexOf(baseTag);
 	if (baseTagIndex < 0) baseTagIndex = allTags.length;
+	const baseVersion = versionFromTag(baseTag);
 
 	for (let i = baseTagIndex - 1; i >= 0; i--) {
 		const tag = allTags[i];
 		if (platformFromTag(tag) !== platform) continue;
+		const currentVersion = versionFromTag(tag);
+		if (compareVersions(baseVersion, currentVersion) <= 0) continue;
 
 		try {
 			const logs = await gitLog(tag);

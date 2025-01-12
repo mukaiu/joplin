@@ -5,12 +5,18 @@ import bridge from '../../../services/bridge';
 import { ContextMenuItemType, ContextMenuOptions, ContextMenuItems, resourceInfo, textToDataUri, svgUriToPng, svgDimensions } from './contextMenuUtils';
 const Menu = bridge().Menu;
 const MenuItem = bridge().MenuItem;
-import Resource from '@joplin/lib/models/Resource';
+import Resource, { resourceOcrStatusToString } from '@joplin/lib/models/Resource';
 import BaseItem from '@joplin/lib/models/BaseItem';
-import BaseModel from '@joplin/lib/BaseModel';
+import BaseModel, { ModelType } from '@joplin/lib/BaseModel';
 import { processPastedHtml } from './resourceHandling';
-import { NoteEntity, ResourceEntity } from '@joplin/lib/services/database/types';
+import { NoteEntity, ResourceEntity, ResourceOcrStatus } from '@joplin/lib/services/database/types';
 import { TinyMceEditorEvents } from '../NoteBody/TinyMCE/utils/types';
+import { itemIsReadOnlySync, ItemSlice } from '@joplin/lib/models/utils/readOnly';
+import Setting from '@joplin/lib/models/Setting';
+import ItemChange from '@joplin/lib/models/ItemChange';
+import { HtmlToMarkdownHandler, MarkupToHtmlHandler } from './types';
+import shim from '@joplin/lib/shim';
+import { openFileWithExternalEditor } from '@joplin/lib/services/ExternalEditWatcher/utils';
 const fs = require('fs-extra');
 const { writeFile } = require('fs-extra');
 const { clipboard } = require('electron');
@@ -24,13 +30,15 @@ function handleCopyToClipboard(options: ContextMenuOptions) {
 	}
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 async function saveFileData(data: any, filename: string) {
 	const newFilePath = await bridge().showSaveDialog({ defaultPath: filename });
 	if (!newFilePath) return;
 	await writeFile(newFilePath, data);
 }
 
-export async function openItemById(itemId: string, dispatch: Function, hash: string = '') {
+// eslint-disable-next-line @typescript-eslint/ban-types -- Old code before rule was applied
+export async function openItemById(itemId: string, dispatch: Function, hash = '') {
 
 	const item = await BaseItem.loadItemById(itemId);
 
@@ -49,7 +57,11 @@ export async function openItemById(itemId: string, dispatch: Function, hash: str
 		}
 
 		try {
-			await ResourceEditWatcher.instance().openAndWatch(resource.id);
+			if (itemIsReadOnlySync(ModelType.Resource, ItemChange.SOURCE_UNSPECIFIED, resource as ItemSlice, Setting.value('sync.userId'), BaseItem.syncShareCache)) {
+				await ResourceEditWatcher.instance().openAsReadOnly(resource.id);
+			} else {
+				await ResourceEditWatcher.instance().openAndWatch(resource.id);
+			}
 		} catch (error) {
 			console.error(error);
 			bridge().showErrorMessageBox(error.message);
@@ -68,7 +80,8 @@ export async function openItemById(itemId: string, dispatch: Function, hash: str
 	}
 }
 
-export function menuItems(dispatch: Function): ContextMenuItems {
+// eslint-disable-next-line @typescript-eslint/ban-types -- Old code before rule was applied
+export function menuItems(dispatch: Function, htmlToMd: HtmlToMarkdownHandler, mdToHtml: MarkupToHtmlHandler): ContextMenuItems {
 	return {
 		open: {
 			label: _('Open...'),
@@ -124,6 +137,23 @@ export function menuItems(dispatch: Function): ContextMenuItems {
 			},
 			isActive: (itemType: ContextMenuItemType, options: ContextMenuOptions) => !options.textToCopy && itemType === ContextMenuItemType.Image || itemType === ContextMenuItemType.Resource,
 		},
+		copyOcrText: {
+			label: _('View OCR text'),
+			onAction: async (options: ContextMenuOptions) => {
+				const { resource } = await resourceInfo(options);
+
+				if (resource.ocr_status === ResourceOcrStatus.Done) {
+					const tempFilePath = `${Setting.value('tempDir')}/${resource.id}_ocr.txt`;
+					await shim.fsDriver().writeFile(tempFilePath, resource.ocr_text, 'utf8');
+					await openFileWithExternalEditor(tempFilePath, bridge());
+				} else {
+					bridge().showInfoMessageBox(_('This attachment does not have OCR data (Status: %s)', resourceOcrStatusToString(resource.ocr_status)));
+				}
+			},
+			isActive: (itemType: ContextMenuItemType, options: ContextMenuOptions) => {
+				return itemType === ContextMenuItemType.Resource || (itemType === ContextMenuItemType.Image && options.resourceId);
+			},
+		},
 		copyPathToClipboard: {
 			label: _('Copy path to clipboard'),
 			onAction: async (options: ContextMenuOptions) => {
@@ -170,7 +200,7 @@ export function menuItems(dispatch: Function): ContextMenuItems {
 				let content = pastedHtml ? pastedHtml : clipboard.readText();
 
 				if (pastedHtml) {
-					content = await processPastedHtml(pastedHtml);
+					content = await processPastedHtml(pastedHtml, htmlToMd, mdToHtml);
 				}
 
 				options.insertContent(content);
@@ -194,10 +224,11 @@ export function menuItems(dispatch: Function): ContextMenuItems {
 	};
 }
 
+// eslint-disable-next-line @typescript-eslint/ban-types -- Old code before rule was applied
 export default async function contextMenu(options: ContextMenuOptions, dispatch: Function) {
 	const menu = new Menu();
 
-	const items = menuItems(dispatch);
+	const items = menuItems(dispatch, options.htmlToMd, options.mdToHtml);
 
 	if (!('readyOnly' in options)) options.isReadOnly = true;
 	for (const itemKey in items) {

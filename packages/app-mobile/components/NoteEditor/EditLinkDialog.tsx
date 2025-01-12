@@ -3,13 +3,15 @@
 const React = require('react');
 const { useState, useEffect, useMemo, useRef } = require('react');
 const { StyleSheet } = require('react-native');
-const { View, Modal, Text, TextInput, Button } = require('react-native');
+const { View, Text, TextInput, Button } = require('react-native');
 
+import Modal from '../Modal';
 import { themeStyle } from '@joplin/lib/theme';
 import { _ } from '@joplin/lib/locale';
 import { EditorControl } from './types';
-import SelectionFormatting from './SelectionFormatting';
 import { useCallback } from 'react';
+import SelectionFormatting from '@joplin/editor/SelectionFormatting';
+import { focus } from '@joplin/lib/utils/focusHandler';
 
 interface LinkDialogProps {
 	editorControl: EditorControl;
@@ -20,7 +22,7 @@ interface LinkDialogProps {
 
 const EditLinkDialog = (props: LinkDialogProps) => {
 	// The content of the link selected in the editor (if any)
-	const editorLinkData = props.selectionState.linkData ?? {};
+	const editorLinkData = props.selectionState.linkData;
 	const [linkLabel, setLinkLabel] = useState('');
 	const [linkURL, setLinkURL] = useState('');
 
@@ -43,7 +45,6 @@ const EditLinkDialog = (props: LinkDialogProps) => {
 				margin: 15,
 				padding: 30,
 				backgroundColor: theme.backgroundColor,
-
 				elevation: 5,
 				shadowOffset: {
 					width: 1,
@@ -83,6 +84,7 @@ const EditLinkDialog = (props: LinkDialogProps) => {
 	const onSubmit = useCallback(() => {
 		props.editorControl.updateLink(linkLabel, linkURL);
 		props.editorControl.hideLinkDialog();
+		focus('EditLinkDialog::onSubmit', props.editorControl);
 	}, [props.editorControl, linkLabel, linkURL]);
 
 	// See https://www.hingehealth.com/engineering-blog/accessible-react-native-textinput/
@@ -100,7 +102,7 @@ const EditLinkDialog = (props: LinkDialogProps) => {
 				autoFocus
 
 				onSubmitEditing={() => {
-					linkInputRef.current.focus();
+					focus('EditLinkDialog::onSubmitEditing', linkInputRef.current);
 				}}
 				onChangeText={(text: string) => setLinkLabel(text)}
 			/>
@@ -131,24 +133,23 @@ const EditLinkDialog = (props: LinkDialogProps) => {
 
 	return (
 		<Modal
-			animationType="slide"
+			animationType="fade"
+			containerStyle={styles.modalContent}
 			transparent={true}
 			visible={props.visible}
 			onRequestClose={() => {
 				props.editorControl.hideLinkDialog();
 			}}>
-			<View style={styles.modalContent}>
-				<Text style={styles.header}>{_('Edit link')}</Text>
-				<View>
-					{linkTextInput}
-					{linkURLInput}
-				</View>
-				<Button
-					style={styles.button}
-					onPress={onSubmit}
-					title={_('Done')}
-				/>
+			<Text style={styles.header}>{_('Edit link')}</Text>
+			<View>
+				{linkTextInput}
+				{linkURLInput}
 			</View>
+			<Button
+				style={styles.button}
+				onPress={onSubmit}
+				title={_('Done')}
+			/>
 		</Modal>
 	);
 };

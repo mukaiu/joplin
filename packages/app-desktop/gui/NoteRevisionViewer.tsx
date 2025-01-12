@@ -10,18 +10,19 @@ import RevisionService from '@joplin/lib/services/RevisionService';
 import { MarkupToHtml } from '@joplin/renderer';
 import time from '@joplin/lib/time';
 import bridge from '../services/bridge';
-import markupLanguageUtils from '../utils/markupLanguageUtils';
+import markupLanguageUtils from '@joplin/lib/utils/markupLanguageUtils';
 import { NoteEntity, RevisionEntity } from '@joplin/lib/services/database/types';
 import { AppState } from '../app.reducer';
 const urlUtils = require('@joplin/lib/urlUtils');
 const ReactTooltip = require('react-tooltip');
-const { urlDecode } = require('@joplin/lib/string-utils');
 const { connect } = require('react-redux');
 import shared from '@joplin/lib/components/shared/note-screen-shared';
+import shim, { MessageBoxType } from '@joplin/lib/shim';
 
 interface Props {
 	themeId: number;
 	noteId: string;
+	// eslint-disable-next-line @typescript-eslint/ban-types -- Old code before rule was applied
 	onBack: Function;
 	customCss: string;
 }
@@ -35,7 +36,9 @@ interface State {
 
 class NoteRevisionViewerComponent extends React.PureComponent<Props, State> {
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	private viewerRef_: any;
+	// eslint-disable-next-line @typescript-eslint/ban-types -- Old code before rule was applied
 	private helpButton_onClick: Function;
 
 	public constructor(props: Props) {
@@ -67,8 +70,8 @@ class NoteRevisionViewerComponent extends React.PureComponent<Props, State> {
 				flex: 1,
 				flexDirection: 'column',
 			},
-			titleInput: Object.assign({}, theme.inputStyle, { flex: 1 }),
-			revisionList: Object.assign({}, theme.dropdownList, { marginLeft: 10, flex: 0.5 }),
+			titleInput: { ...theme.inputStyle, flex: 1 },
+			revisionList: { ...theme.dropdownList, marginLeft: 10, flex: 0.5 },
 		};
 
 		return style;
@@ -86,7 +89,7 @@ class NoteRevisionViewerComponent extends React.PureComponent<Props, State> {
 			},
 			() => {
 				void this.reloadNote();
-			}
+			},
 		);
 	}
 
@@ -95,13 +98,14 @@ class NoteRevisionViewerComponent extends React.PureComponent<Props, State> {
 		this.setState({ restoring: true });
 		await RevisionService.instance().importRevisionNote(this.state.note);
 		this.setState({ restoring: false });
-		alert(RevisionService.instance().restoreSuccessMessage(this.state.note));
+		await shim.showMessageBox(RevisionService.instance().restoreSuccessMessage(this.state.note), { type: MessageBoxType.Info });
 	}
 
 	private backButton_click() {
 		if (this.props.onBack) this.props.onBack();
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	private revisionList_onChange(event: any) {
 		const value = event.target.value;
 
@@ -114,7 +118,7 @@ class NoteRevisionViewerComponent extends React.PureComponent<Props, State> {
 				},
 				() => {
 					void this.reloadNote();
-				}
+				},
 			);
 		}
 	}
@@ -137,7 +141,7 @@ class NoteRevisionViewerComponent extends React.PureComponent<Props, State> {
 		const theme = themeStyle(this.props.themeId);
 
 		const markupToHtml = markupLanguageUtils.newMarkupToHtml({}, {
-			resourceBaseUrl: `file://${Setting.value('resourceDir')}/`,
+			resourceBaseUrl: `joplin-content://note-viewer/${Setting.value('resourceDir')}/`,
 			customCss: this.props.customCss ? this.props.customCss : '',
 		});
 
@@ -147,14 +151,15 @@ class NoteRevisionViewerComponent extends React.PureComponent<Props, State> {
 			postMessageSyntax: 'ipcProxySendToHost',
 		});
 
-		this.viewerRef_.current.send('setHtml', result.html, {
+		this.viewerRef_.current.setHtml(result.html, {
 			// cssFiles: result.cssFiles,
 			pluginAssets: result.pluginAssets,
 		});
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	private async webview_ipcMessage(event: any) {
-		// For the revision view, we only suppport a minimal subset of the IPC messages.
+		// For the revision view, we only support a minimal subset of the IPC messages.
 		// For example, we don't need interactive checkboxes or sync between viewer and editor view.
 		// We try to get most links work though, except for internal (joplin://) links.
 
@@ -167,11 +172,7 @@ class NoteRevisionViewerComponent extends React.PureComponent<Props, State> {
 			if (msg.indexOf('joplin://') === 0) {
 				throw new Error(_('Unsupported link or message: %s', msg));
 			} else if (urlUtils.urlProtocol(msg)) {
-				if (msg.indexOf('file://') === 0) {
-					void require('electron').shell.openExternal(urlDecode(msg));
-				} else {
-					void require('electron').shell.openExternal(msg);
-				}
+				await bridge().openExternal(msg);
 			} else if (msg.indexOf('#') === 0) {
 				// This is an internal anchor, which is handled by the WebView so skip this case
 			} else {
@@ -196,7 +197,7 @@ class NoteRevisionViewerComponent extends React.PureComponent<Props, State> {
 			revisionListItems.push(
 				<option key={rev.id} value={rev.id}>
 					{`${time.formatMsToLocal(rev.item_updated_time)} (${stats})`}
-				</option>
+				</option>,
 			);
 		}
 
@@ -205,14 +206,14 @@ class NoteRevisionViewerComponent extends React.PureComponent<Props, State> {
 
 		const titleInput = (
 			<div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', marginBottom: 10, borderWidth: 1, borderBottomStyle: 'solid', borderColor: theme.dividerColor, paddingBottom: 10 }}>
-				<button onClick={this.backButton_click} style={Object.assign({}, theme.buttonStyle, { marginRight: 10, height: theme.inputStyle.height })}>
+				<button onClick={this.backButton_click} style={{ ...theme.buttonStyle, marginRight: 10, height: theme.inputStyle.height }}>
 					<i style={theme.buttonIconStyle} className={'fa fa-chevron-left'}></i>{_('Back')}
 				</button>
 				<input readOnly type="text" style={style.titleInput} value={this.state.note ? this.state.note.title : ''} />
 				<select disabled={!this.state.revisions.length} value={this.state.currentRevId} style={style.revisionList} onChange={this.revisionList_onChange}>
 					{revisionListItems}
 				</select>
-				<button disabled={!this.state.revisions.length || this.state.restoring} onClick={this.importButton_onClick} style={Object.assign({}, theme.buttonStyle, { marginLeft: 10, height: theme.inputStyle.height })}>
+				<button disabled={!this.state.revisions.length || this.state.restoring} onClick={this.importButton_onClick} style={{ ...theme.buttonStyle, marginLeft: 10, height: theme.inputStyle.height }}>
 					{restoreButtonTitle}
 				</button>
 				<HelpButton tip={helpMessage} id="noteRevisionHelpButton" onClick={this.helpButton_onClick} />
@@ -222,6 +223,7 @@ class NoteRevisionViewerComponent extends React.PureComponent<Props, State> {
 		const viewer = <NoteTextViewer themeId={this.props.themeId} viewerStyle={{ display: 'flex', flex: 1, borderLeft: 'none' }} ref={this.viewerRef_} onDomReady={this.viewer_domReady} onIpcMessage={this.webview_ipcMessage} />;
 
 		return (
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 			<div style={style.root as any}>
 				{titleInput}
 				{viewer}

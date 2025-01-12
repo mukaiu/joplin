@@ -1,5 +1,4 @@
-import time from '../time';
-import { revisionService, setupDatabaseAndSynchronizer, switchClient } from '../testing/test-utils';
+import { revisionService, setupDatabaseAndSynchronizer, switchClient, msleep } from '../testing/test-utils';
 import Setting from '../models/Setting';
 import Note from '../models/Note';
 import ItemChange from '../models/ItemChange';
@@ -7,6 +6,32 @@ import Revision from '../models/Revision';
 import BaseModel, { ModelType } from '../BaseModel';
 import RevisionService from '../services/RevisionService';
 import { MarkupLanguage } from '../../renderer';
+import { NoteEntity } from './database/types';
+
+interface CreateTestRevisionOptions {
+	// How long to pause (in milliseconds) between each note modification.
+	// For example, [10, 20] would modify the note twice, with pauses of 10ms and 20ms.
+	delaysBetweenModifications: number[];
+}
+
+const createTestRevisions = async (
+	noteProperties: Partial<NoteEntity>,
+	{ delaysBetweenModifications }: CreateTestRevisionOptions,
+) => {
+	const note = await Note.save({
+		title: 'note',
+		...noteProperties,
+	});
+
+	let counter = 0;
+	for (const delay of delaysBetweenModifications) {
+		jest.advanceTimersByTime(delay);
+		await Note.save({ ...noteProperties, id: note.id, title: `note REV${counter++}` });
+		await revisionService().collectRevisions();
+	}
+
+	return note;
+};
 
 describe('services/RevisionService', () => {
 
@@ -14,6 +39,8 @@ describe('services/RevisionService', () => {
 		await setupDatabaseAndSynchronizer(1);
 		await switchClient(1);
 		Setting.setValue('revisionService.intervalBetweenRevisions', 0);
+
+		jest.useFakeTimers({ advanceTimers: true });
 	});
 
 	it('should create diff and rebuild notes', (async () => {
@@ -39,7 +66,7 @@ describe('services/RevisionService', () => {
 		expect(rev2.author).toBe('');
 
 		const time_rev2 = Date.now();
-		await time.msleep(10);
+		await msleep(10);
 
 		const ttl = Date.now() - time_rev2 - 1;
 		await service.deleteOldRevisions(ttl);
@@ -95,7 +122,7 @@ describe('services/RevisionService', () => {
 		await service.collectRevisions();
 
 		const time_v1 = Date.now();
-		await time.msleep(100);
+		await msleep(100);
 
 		await Note.save({ id: n1_v1.id, title: 'hello welcome' });
 		await service.collectRevisions();
@@ -117,12 +144,12 @@ describe('services/RevisionService', () => {
 		const n1_v1 = await Note.save({ id: n1_v0.id, title: 'one' });
 		await service.collectRevisions();
 		const time_v1 = Date.now();
-		await time.msleep(100);
+		await msleep(100);
 
 		await Note.save({ id: n1_v1.id, title: 'one two' });
 		await service.collectRevisions();
 		const time_v2 = Date.now();
-		await time.msleep(100);
+		await msleep(100);
 
 		await Note.save({ id: n1_v1.id, title: 'one two three' });
 		await service.collectRevisions();
@@ -160,7 +187,7 @@ describe('services/RevisionService', () => {
 		const n2_v1 = await Note.save({ id: n2_v0.id, title: 'note 2' });
 		await service.collectRevisions();
 		const time_n2_v1 = Date.now();
-		await time.msleep(100);
+		await msleep(100);
 
 		await Note.save({ id: n1_v1.id, title: 'note 1 (v2)' });
 		await Note.save({ id: n2_v1.id, title: 'note 2 (v2)' });
@@ -185,6 +212,25 @@ describe('services/RevisionService', () => {
 			expect(rev1.title).toBe('note 2 (v2)');
 		}
 	}));
+
+	it('should not error on revisions for missing (not downloaded yet/permanently deleted) notes', async () => {
+		Setting.setValue('revisionService.intervalBetweenRevisions', 100);
+
+		const note = await createTestRevisions({
+			share_id: 'test-share-id',
+		}, { delaysBetweenModifications: [200, 400, 600, 8_000] });
+		const getNoteRevisions = () => {
+			return Revision.allByType(BaseModel.TYPE_NOTE, note.id);
+		};
+		expect(await getNoteRevisions()).toHaveLength(4);
+
+		await Note.delete(note.id, { toTrash: false, sourceDescription: 'tests/RevisionService' });
+
+		await revisionService().deleteOldRevisions(4_000);
+
+		// Should leave newer revisions (handle the case where revisions are downloaded before the note).
+		expect(await getNoteRevisions()).toHaveLength(1);
+	});
 
 	it('should handle conflicts', (async () => {
 		const service = new RevisionService();
@@ -226,7 +272,7 @@ describe('services/RevisionService', () => {
 		const n1 = await Note.save({ title: 'hello' });
 		const noteId = n1.id;
 
-		await time.msleep(100);
+		await msleep(100);
 
 		// Set the interval in such a way that the note is considered an old one.
 		Setting.setValue('revisionService.oldNoteInterval', 50);
@@ -258,7 +304,7 @@ describe('services/RevisionService', () => {
 		}
 	}));
 
-	it('should create a revision for notes that get deleted (recyle bin)', (async () => {
+	it('should create a revision for notes that get deleted (recycle bin)', (async () => {
 		const n1 = await Note.save({ title: 'hello' });
 		const noteId = n1.id;
 
@@ -348,10 +394,10 @@ describe('services/RevisionService', () => {
 		const n1_v0 = await Note.save({ title: '' });
 		const n1_v1 = await Note.save({ id: n1_v0.id, title: 'hello' });
 		await revisionService().collectRevisions(); // REV 1
-		await time.sleep(0.1);
+		await msleep(10);
 		await Note.save({ id: n1_v1.id, title: 'hello welcome' });
 		await revisionService().collectRevisions(); // REV 2
-		await time.sleep(0.1);
+		await msleep(10);
 
 		expect((await Revision.all()).length).toBe(2);
 
@@ -376,7 +422,7 @@ describe('services/RevisionService', () => {
 		const n1_v1 = await Note.save({ id: n1_v0.id, title: 'hello' });
 		await revisionService().collectRevisions(); // REV 1
 		const timeRev1 = Date.now();
-		await time.msleep(100);
+		await msleep(100);
 
 		await Note.save({ id: n1_v1.id, title: 'hello welcome' });
 		await revisionService().collectRevisions(); // REV 2
@@ -400,7 +446,7 @@ describe('services/RevisionService', () => {
 		const n1_v1 = await Note.save({ id: n1_v0.id, title: 'hello' });
 		await revisionService().collectRevisions(); // REV 1
 		const timeRev1 = Date.now();
-		await time.msleep(100);
+		await msleep(100);
 
 		await Note.save({ id: n1_v1.id, title: 'hello welcome' });
 		await revisionService().collectRevisions(); // REV 2
@@ -457,14 +503,15 @@ describe('services/RevisionService', () => {
 		await Note.save({ id: n1_v0.id, title: 'hello' });
 		await revisionService().collectRevisions(); // REV 1
 		const timeRev1 = Date.now();
-		await time.sleep(2);
+		const sleepTime = 500;
+		await msleep(sleepTime);
 
 		const timeRev2 = Date.now();
 		await Note.save({ id: n1_v0.id, title: 'hello 2' });
 		await revisionService().collectRevisions(); // REV 2
 		expect((await Revision.all()).length).toBe(2);
 
-		const interval = Date.now() - timeRev1 + 1;
+		const interval = Date.now() - timeRev1 + sleepTime / 2;
 		Setting.setValue('revisionService.intervalBetweenRevisions', interval);
 
 		await Note.save({ id: n1_v0.id, title: 'hello 3' });
@@ -477,7 +524,7 @@ describe('services/RevisionService', () => {
 		const n1_v0 = await Note.save({ title: '', is_todo: 1, todo_completed: 0 });
 		const n1_v1 = await Note.save({ id: n1_v0.id, title: 'hello' });
 		await revisionService().collectRevisions(); // REV 1
-		await time.msleep(100);
+		await msleep(100);
 
 		await Note.save({ id: n1_v1.id, title: 'hello welcome', todo_completed: 1000 });
 		await revisionService().collectRevisions(); // REV 2

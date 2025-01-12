@@ -12,12 +12,6 @@ module.exports = class extends Generator {
 
 		this.option('silent');
 		this.option('update');
-		this.option('nodePackageManager', 'npm');
-
-		if (this.options.update) {
-			// When updating, overwrite files without prompting
-			this.conflicter.force = true;
-		}
 	}
 
 	async prompting() {
@@ -100,7 +94,7 @@ module.exports = class extends Generator {
 
 			if (!derivedProps.packageName) derivedProps.packageName = defaultPackageName;
 
-			this.props = Object.assign({}, initialProps, derivedProps);
+			this.props = { ...initialProps, ...derivedProps };
 		}
 	}
 
@@ -145,7 +139,7 @@ module.exports = class extends Generator {
 							const newContent = mergePackageKey(null, sourceContent, destContent);
 							return JSON.stringify(newContent, null, 2);
 						},
-					}
+					},
 				);
 			} else if (this.options.update && destFile === 'plugin.config.json' && this.fs.exists(destFilePath)) {
 				// Keep existing content for now. Maybe later we could merge the configs.
@@ -158,20 +152,29 @@ module.exports = class extends Generator {
 						process: (sourceBuffer) => {
 							return mergeIgnoreFile(sourceBuffer.toString(), destContent);
 						},
-					}
+					},
+				);
+			} else if (this.options.update) {
+				this.fs.copy(
+					this.templatePath(file),
+					destFilePath, {
+						process: (sourceBuffer) => {
+							return sourceBuffer.toString();
+						},
+					},
 				);
 			} else {
 				this.fs.copyTpl(
 					this.templatePath(file),
 					destFilePath,
-					this.props
+					this.props,
 				);
 			}
 		}
 
 		this.fs.copy(
 			this.templatePath('api'),
-			this.destinationPath('api')
+			this.destinationPath('api'),
 		);
 	}
 

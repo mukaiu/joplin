@@ -1,6 +1,6 @@
 import { createUserAndSession, beforeAllDb, afterAllTests, beforeEachDb, models, checkThrowAsync, expectThrow } from '../utils/testing/testUtils';
 import { EmailSender, UserFlagType } from '../services/database/types';
-import { ErrorUnprocessableEntity } from '../utils/errors';
+import { ErrorBadRequest, ErrorUnprocessableEntity } from '../utils/errors';
 import { betaUserDateRange, stripeConfig } from '../utils/stripe';
 import { accountByType, AccountType } from './UserModel';
 import { failedPaymentFinalAccount, failedPaymentWarningInterval } from './SubscriptionModel';
@@ -50,6 +50,19 @@ describe('UserModel', () => {
 		// check that the email is valid
 		error = await checkThrowAsync(async () => await models().user().save({ id: user1.id, email: 'ohno' }));
 		expect(error instanceof ErrorUnprocessableEntity).toBe(true);
+
+		// check that the email is not too long
+		error = await checkThrowAsync(async () => await models().user().save({ id: user1.id, email: `${'long'.repeat(100)}@example.com` }));
+		expect(error instanceof ErrorUnprocessableEntity).toBe(true);
+
+		// check that the full name is not too long
+		error = await checkThrowAsync(async () => await models().user().save({ id: user1.id, full_name: 'long'.repeat(400) }));
+		expect(error instanceof ErrorUnprocessableEntity).toBe(true);
+
+		// should not throw if updating with valid data
+		expect(
+			await checkThrowAsync(async () => await models().user().save({ id: user1.id, full_name: 'Example', email: 'new_email@example.com' })),
+		).toBe(null);
 	});
 
 	// test('should delete a user', async () => {
@@ -308,6 +321,7 @@ describe('UserModel', () => {
 		const { user: user3 } = await createUserAndSession(3);
 		const { user: user4 } = await createUserAndSession(4);
 
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 		const syncInfo1: any = {
 			'version': 3,
 			'e2ee': {
@@ -326,9 +340,11 @@ describe('UserModel', () => {
 			},
 		};
 
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 		const syncInfo2: any = JSON.parse(JSON.stringify(syncInfo1));
 		syncInfo2.ppk.value.publicKey = 'PUBLIC_KEY_2';
 
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 		const syncInfo3: any = JSON.parse(JSON.stringify(syncInfo1));
 		delete syncInfo3.ppk;
 
@@ -423,6 +439,20 @@ describe('UserModel', () => {
 
 		await models().userFlag().add(user1.id, UserFlagType.ManuallyDisabled);
 		expect((await models().user().load(user1.id)).enabled).toBe(0);
+	});
+
+	test('should throw an error if the password being saved seems to be hashed', async () => {
+		const passwordSimilarToHash = '$2a$10';
+
+		const user = await models().user().save({
+			email: 'test@example.com',
+			password: '111111',
+		});
+
+		const error = await checkThrowAsync(async () => await models().user().save({ id: user.id, password: passwordSimilarToHash }));
+
+		expect(error.message).toBe(`Unable to save user because password already seems to be hashed. User id: ${user.id}`);
+		expect(error instanceof ErrorBadRequest).toBe(true);
 	});
 
 });

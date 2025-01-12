@@ -103,7 +103,7 @@ function enexXmlToHtml_(stream, resources) {
 					for (let i = 0; i < remainingResources.length; i++) {
 						const r = remainingResources[i];
 						if (!r.id) {
-							resource = Object.assign({}, r);
+							resource = { ...r };
 							resource.id = hash;
 							remainingResources.splice(i, 1);
 							found = true;
@@ -117,7 +117,7 @@ function enexXmlToHtml_(stream, resources) {
 				}
 
 				// If the resource does not appear among the note's resources, it
-				// means it's an attachement. It will be appended along with the
+				// means it's an attachment. It will be appended along with the
 				// other remaining resources at the bottom of the markdown text.
 				if (resource && !!resource.id) {
 					section.lines = addResourceTag(section.lines, resource, nodeAttributes);

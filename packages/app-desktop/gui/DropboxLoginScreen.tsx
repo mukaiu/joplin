@@ -11,8 +11,10 @@ interface Props {
 	themeId: string;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 class DropboxLoginScreenComponent extends React.Component<any, any> {
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	private shared_: any;
 
 	public constructor(props: Props) {
@@ -29,15 +31,13 @@ class DropboxLoginScreenComponent extends React.Component<any, any> {
 		const style = this.props.style;
 		const theme = themeStyle(this.props.themeId);
 
-		const containerStyle = Object.assign({}, theme.containerStyle, {
-			padding: theme.configScreenPadding,
+		const containerStyle = { ...theme.containerStyle, padding: theme.configScreenPadding,
 			height: style.height - theme.margin * 2,
-			flex: 1,
-		});
+			flex: 1 };
 
-		const inputStyle = Object.assign({}, theme.inputStyle, { width: 500 });
+		const inputStyle = { ...theme.inputStyle, width: 500 };
 
-		const buttonStyle = Object.assign({}, theme.buttonStyle, { marginRight: 10 });
+		const buttonStyle = { ...theme.buttonStyle, marginRight: 10 };
 
 		return (
 			<div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -63,6 +63,7 @@ class DropboxLoginScreenComponent extends React.Component<any, any> {
 	}
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 const mapStateToProps = (state: any) => {
 	return {
 		themeId: state.settings.theme,

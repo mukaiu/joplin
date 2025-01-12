@@ -1,28 +1,71 @@
-import { NoteEntity } from '../../services/database/types';
+import { FolderEntity, NoteEntity } from '../../services/database/types';
 import { reg } from '../../registry';
 import Folder from '../../models/Folder';
-import BaseModel from '../../BaseModel';
+import BaseModel, { ModelType } from '../../BaseModel';
 import Note from '../../models/Note';
 import Resource from '../../models/Resource';
 import ResourceFetcher from '../../services/ResourceFetcher';
 import DecryptionWorker from '../../services/DecryptionWorker';
 import Setting from '../../models/Setting';
 import { Mutex } from 'async-mutex';
+import { itemIsReadOnlySync, ItemSlice } from '../../models/utils/readOnly';
+import ItemChange from '../../models/ItemChange';
+import BaseItem from '../../models/BaseItem';
+
+interface SharedResource {
+	uri: string;
+	mimeType: string;
+	name: string;
+}
+
+interface SharedData {
+	title: string;
+	text: string;
+	resources: SharedResource[];
+}
+
+export interface Props {
+	provisionalNoteIds: string[];
+	noteId: string;
+	folders: FolderEntity[];
+	sharedData: SharedData|undefined;
+}
+
+export interface BaseNoteScreenComponent {
+	props: Props;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
+	state: any;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
+	setState: (newState: any)=> void;
+
+	scheduleSave(): void;
+	scheduleFocusUpdate(): void;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
+	attachFile(asset: any, fileType: any): void;
+	lastLoadedNoteId_?: string;
+}
 
 interface Shared {
 	noteExists?: (noteId: string)=> Promise<boolean>;
 	handleNoteDeletedWhileEditing_?: (note: NoteEntity)=> Promise<NoteEntity>;
-	saveNoteButton_press?: (comp: any, folderId: string, options: any)=> Promise<void>;
-	saveOneProperty?: (comp: any, name: string, value: any)=> void;
-	noteComponent_change?: (comp: any, propName: string, propValue: any)=> void;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
+	saveNoteButton_press?: (comp: BaseNoteScreenComponent, folderId: string, options: any)=> Promise<void>;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
+	saveOneProperty?: (comp: BaseNoteScreenComponent, name: string, value: any)=> void;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
+	noteComponent_change?: (comp: BaseNoteScreenComponent, propName: string, propValue: any)=> void;
 	clearResourceCache?: ()=> void;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	attachedResources?: (noteBody: string)=> Promise<any>;
-	isModified?: (comp: any)=> boolean;
-	initState?: (comp: any)=> void;
-	toggleIsTodo_onPress?: (comp: any)=> void;
+	isModified?: (comp: BaseNoteScreenComponent)=> boolean;
+	initState?: (comp: BaseNoteScreenComponent)=> Promise<void>;
+	toggleIsTodo_onPress?: (comp: BaseNoteScreenComponent)=> void;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	toggleCheckboxRange?: (ipcMessage: string, noteBody: string)=> any;
-	toggleCheckbox?: (ipcMessage: string, noteBody: string)=> void;
+	toggleCheckbox?: (ipcMessage: string, noteBody: string)=> string;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	installResourceHandling?: (refreshResourceHandler: any)=> void;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	uninstallResourceHandling?: (refreshResourceHandler: any)=> void;
 }
 
@@ -44,21 +87,20 @@ shared.handleNoteDeletedWhileEditing_ = async (note: NoteEntity) => {
 
 	reg.logger().info('Note has been deleted while it was being edited - recreating it.');
 
-	let newNote = Object.assign({}, note);
+	let newNote = { ...note };
 	delete newNote.id;
 	newNote = await Note.save(newNote);
 
 	return Note.load(newNote.id);
 };
 
-shared.saveNoteButton_press = async function(comp: any, folderId: string = null, options: any = null) {
-	options = Object.assign({}, {
-		autoTitle: true,
-	}, options);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
+shared.saveNoteButton_press = async function(comp: BaseNoteScreenComponent, folderId: string = null, options: any = null) {
+	options = { autoTitle: true, ...options };
 
 	const releaseMutex = await saveNoteMutex_.acquire();
 
-	let note = Object.assign({}, comp.state.note);
+	let note = { ...comp.state.note };
 
 	const recreatedNote = await shared.handleNoteDeletedWhileEditing_(note);
 	if (recreatedNote) note = recreatedNote;
@@ -78,6 +120,7 @@ shared.saveNoteButton_press = async function(comp: any, folderId: string = null,
 	const saveOptions = {
 		userSideValidation: true,
 		fields: BaseModel.diffObjectsFields(comp.state.lastSavedNote, note),
+		dispatchOptions: { preserveSelection: true },
 	};
 
 	const hasAutoTitle = comp.state.newAndNoTitleChangeNoteId || (isProvisionalNote && !note.title);
@@ -86,7 +129,7 @@ shared.saveNoteButton_press = async function(comp: any, folderId: string = null,
 		if (saveOptions.fields && saveOptions.fields.indexOf('title') < 0) saveOptions.fields.push('title');
 	}
 
-	const savedNote = 'fields' in saveOptions && !saveOptions.fields.length ? Object.assign({}, note) : await Note.save(note, saveOptions);
+	const savedNote = 'fields' in saveOptions && !saveOptions.fields.length ? { ...note } : await Note.save(note, saveOptions);
 
 	const stateNote = comp.state.note;
 
@@ -94,7 +137,7 @@ shared.saveNoteButton_press = async function(comp: any, folderId: string = null,
 	if (!recreatedNote && (!stateNote || stateNote.id !== savedNote.id)) return releaseMutex();
 
 	// Re-assign any property that might have changed during saving (updated_time, etc.)
-	note = Object.assign(note, savedNote);
+	note = { ...note, ...savedNote };
 
 	if (stateNote.id === note.id) {
 		// But we preserve the current title and body because
@@ -108,8 +151,9 @@ shared.saveNoteButton_press = async function(comp: any, folderId: string = null,
 		note.body = stateNote.body;
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	const newState: any = {
-		lastSavedNote: Object.assign({}, note),
+		lastSavedNote: { ...note, ...savedNote },
 		note: note,
 	};
 
@@ -128,7 +172,7 @@ shared.saveNoteButton_press = async function(comp: any, folderId: string = null,
 			if (stateNote.id !== geoNote.id) return; // Another note has been loaded while geoloc was being retrieved
 
 			// Geo-location for this note has been saved to the database however the properties
-			// are is not in the state so set them now.
+			// are not in the state so set them now.
 
 			const geoInfo = {
 				longitude: geoNote.longitude,
@@ -136,8 +180,8 @@ shared.saveNoteButton_press = async function(comp: any, folderId: string = null,
 				altitude: geoNote.altitude,
 			};
 
-			const modNote = Object.assign({}, stateNote, geoInfo);
-			const modLastSavedNote = Object.assign({}, comp.state.lastSavedNote, geoInfo);
+			const modNote = { ...stateNote, ...geoInfo };
+			const modLastSavedNote = { ...comp.state.lastSavedNote, ...geoInfo };
 
 			comp.setState({ note: modNote, lastSavedNote: modLastSavedNote });
 		};
@@ -149,33 +193,39 @@ shared.saveNoteButton_press = async function(comp: any, folderId: string = null,
 	releaseMutex();
 };
 
-shared.saveOneProperty = async function(comp: any, name: string, value: any) {
-	let note = Object.assign({}, comp.state.note);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
+shared.saveOneProperty = async function(comp: BaseNoteScreenComponent, name: string, value: any) {
+	let note = { ...comp.state.note };
 
 	const recreatedNote = await shared.handleNoteDeletedWhileEditing_(note);
 	if (recreatedNote) note = recreatedNote;
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	let toSave: any = { id: note.id };
 	toSave[name] = value;
 	toSave = await Note.save(toSave);
 	note[name] = toSave[name];
 
 	comp.setState({
-		lastSavedNote: Object.assign({}, note),
+		lastSavedNote: { ...note },
 		note: note,
 	});
 };
 
-shared.noteComponent_change = function(comp: any, propName: string, propValue: any) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
+shared.noteComponent_change = function(comp: BaseNoteScreenComponent, propName: string, propValue: any) {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	const newState: any = {};
 
-	const note = Object.assign({}, comp.state.note);
+	const note = { ...comp.state.note };
 	note[propName] = propValue;
 	newState.note = note;
 
 	comp.setState(newState);
+	comp.scheduleSave();
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 let resourceCache_: any = {};
 
 shared.clearResourceCache = function() {
@@ -186,6 +236,7 @@ shared.attachedResources = async function(noteBody: string) {
 	if (!noteBody) return {};
 	const resourceIds = await Note.linkedItemIdsByType(BaseModel.TYPE_RESOURCE, noteBody);
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	const output: any = {};
 	for (let i = 0; i < resourceIds.length; i++) {
 		const id = resourceIds[i];
@@ -210,17 +261,18 @@ shared.attachedResources = async function(noteBody: string) {
 	return output;
 };
 
-shared.isModified = function(comp: any) {
+shared.isModified = function(comp: BaseNoteScreenComponent) {
 	if (!comp.state.note || !comp.state.lastSavedNote) return false;
 	const diff = BaseModel.diffObjects(comp.state.lastSavedNote, comp.state.note);
 	delete diff.type_;
 	return !!Object.getOwnPropertyNames(diff).length;
 };
 
-shared.initState = async function(comp: any) {
+shared.initState = async function(comp: BaseNoteScreenComponent) {
 	const isProvisionalNote = comp.props.provisionalNoteIds.includes(comp.props.noteId);
 
 	const note = await Note.load(comp.props.noteId);
+
 	let mode = 'view';
 
 	if (isProvisionalNote && !comp.props.sharedData) {
@@ -228,18 +280,32 @@ shared.initState = async function(comp: any) {
 		comp.scheduleFocusUpdate();
 	}
 
-	const folder = Folder.byId(comp.props.folders, note.parent_id);
-
-	comp.setState({
-		lastSavedNote: Object.assign({}, note),
-		note: note,
-		mode: mode,
-		folder: folder,
-		isLoading: false,
-		fromShare: !!comp.props.sharedData,
-		noteResources: await shared.attachedResources(note ? note.body : ''),
-	});
-
+	const fromShare = !!comp.props.sharedData;
+	if (note) {
+		const folder = Folder.byId(comp.props.folders, note.parent_id);
+		comp.setState({
+			lastSavedNote: { ...note },
+			note: note,
+			mode: mode,
+			folder: folder,
+			isLoading: false,
+			fromShare: !!comp.props.sharedData,
+			noteResources: await shared.attachedResources(note ? note.body : ''),
+			readOnly: itemIsReadOnlySync(ModelType.Note, ItemChange.SOURCE_UNSPECIFIED, note as ItemSlice, Setting.value('sync.userId'), BaseItem.syncShareCache),
+		});
+	} else {
+		// Handle the case where a non-existent note is loaded. This can happen briefly after deleting a note.
+		comp.setState({
+			lastSavedNote: {},
+			note: {},
+			mode,
+			folder: null,
+			isLoading: true,
+			fromShare,
+			noteResources: [],
+			readOnly: true,
+		});
+	}
 
 	if (comp.props.sharedData) {
 		if (comp.props.sharedData.title) {
@@ -262,10 +328,10 @@ shared.initState = async function(comp: any) {
 	}
 
 	// eslint-disable-next-line require-atomic-updates
-	comp.lastLoadedNoteId_ = note.id;
+	comp.lastLoadedNoteId_ = note?.id;
 };
 
-shared.toggleIsTodo_onPress = function(comp: any) {
+shared.toggleIsTodo_onPress = function(comp: BaseNoteScreenComponent) {
 	const newNote = Note.toggleIsTodo(comp.state.note);
 	const newState = { note: newNote };
 	comp.setState(newState);
@@ -310,22 +376,27 @@ function toggleCheckboxLine(ipcMessage: string, noteBody: string) {
 shared.toggleCheckboxRange = function(ipcMessage: string, noteBody: string) {
 	const [lineIndex, line] = toggleCheckboxLine(ipcMessage, noteBody).slice(1);
 	const from = { line: lineIndex, ch: 0 };
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	const to = { line: lineIndex, ch: (line as any).length };
 	return { line, from, to };
 };
 
 shared.toggleCheckbox = function(ipcMessage: string, noteBody: string) {
 	const [newBody, lineIndex, line] = toggleCheckboxLine(ipcMessage, noteBody);
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	(newBody as any)[lineIndex as any] = line;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	return (newBody as any).join('\n');
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 shared.installResourceHandling = function(refreshResourceHandler: any) {
 	ResourceFetcher.instance().on('downloadComplete', refreshResourceHandler);
 	ResourceFetcher.instance().on('downloadStarted', refreshResourceHandler);
 	DecryptionWorker.instance().on('resourceDecrypted', refreshResourceHandler);
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 shared.uninstallResourceHandling = function(refreshResourceHandler: any) {
 	ResourceFetcher.instance().off('downloadComplete', refreshResourceHandler);
 	ResourceFetcher.instance().off('downloadStarted', refreshResourceHandler);

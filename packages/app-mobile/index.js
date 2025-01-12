@@ -6,9 +6,7 @@
 
 // So there's basically still a one way flux: React => SQLite => Redux => React
 
-// For aws-sdk-js-v3
-import 'react-native-get-random-values';
-import 'react-native-url-polyfill/auto';
+import './utils/polyfills';
 
 import { LogBox, AppRegistry } from 'react-native';
 const Root = require('./root').default;
@@ -45,9 +43,6 @@ LogBox.ignoreLogs([
 	// Apparently it can be safely ignored:
 	// https://github.com/react-native-webview/react-native-webview/issues/124
 	'Did not receive response to shouldStartLoad in time, defaulting to YES',
-
-	// Emitted by react-native-popup-menu
-	'MenuContext is deprecated and it might be removed in future releases, use MenuProvider instead.',
 ]);
 
 AppRegistry.registerComponent('Joplin', () => Root);

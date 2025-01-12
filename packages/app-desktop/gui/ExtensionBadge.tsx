@@ -1,21 +1,23 @@
 import * as React from 'react';
 import bridge from '../services/bridge';
 import { _ } from '@joplin/lib/locale';
-import { themeStyle } from '@joplin/lib/theme';
+import { ThemeStyle, themeStyle } from '@joplin/lib/theme';
 const { createSelector } = require('reselect');
 
 interface Props {
 	themeId: number;
 	type: string;
 	url: string;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	style?: any;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 const themeSelector = (_state: any, props: any) => themeStyle(props.themeId);
 
 const styleSelector = createSelector(
 	themeSelector,
-	(theme: any) => {
+	(theme: ThemeStyle) => {
 		const output = {
 			root: {
 				width: 220,
@@ -53,7 +55,7 @@ const styleSelector = createSelector(
 		};
 
 		return output;
-	}
+	},
 );
 
 function platformAssets(type: string) {
@@ -82,7 +84,7 @@ function ExtensionBadge(props: Props) {
 		void bridge().openExternal(props.url);
 	};
 
-	const rootStyle = props.style ? Object.assign({}, style.root, props.style) : style.root;
+	const rootStyle = props.style ? { ...style.root, ...props.style } : style.root;
 
 	return (
 		<a style={rootStyle} onClick={onClick} href="#">

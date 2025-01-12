@@ -1,6 +1,7 @@
-import BaseModel from '../BaseModel';
+import BaseModel, { DeleteOptions } from '../BaseModel';
 import { ResourceLocalStateEntity } from '../services/database/types';
 import Database from '../database';
+import ActionLogger from '../utils/ActionLogger';
 
 export default class ResourceLocalState extends BaseModel {
 	public static tableName() {
@@ -26,15 +27,19 @@ export default class ResourceLocalState extends BaseModel {
 		return result;
 	}
 
-	public static async save(o: ResourceLocalStateEntity) {
-		const queries = [{ sql: 'DELETE FROM resource_local_states WHERE resource_id = ?', params: [o.resource_id] }, Database.insertQuery(this.tableName(), o)];
-
-		return this.db().transactionExecBatch(queries);
+	public static saveQueries(o: ResourceLocalStateEntity) {
+		return [{ sql: 'DELETE FROM resource_local_states WHERE resource_id = ?', params: [o.resource_id] }, Database.insertQuery(this.tableName(), o)];
 	}
 
-	public static batchDelete(ids: string[], options: any = null) {
-		options = options ? Object.assign({}, options) : {};
+	public static async save(o: ResourceLocalStateEntity) {
+		return this.db().transactionExecBatch(this.saveQueries(o));
+	}
+
+	public static batchDelete(ids: string[], options: DeleteOptions = {}) {
+		options = { ...options };
 		options.idFieldName = 'resource_id';
+		options.sourceDescription = ActionLogger.from(options.sourceDescription);
+		options.sourceDescription.addDescription('Delete local resource state');
 		return super.batchDelete(ids, options);
 	}
 }

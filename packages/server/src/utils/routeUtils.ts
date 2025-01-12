@@ -1,6 +1,6 @@
 import config, { baseUrl } from '../config';
 import { Item, ItemAddressingType, User, Uuid } from '../services/database/types';
-import { ErrorBadRequest, ErrorForbidden, ErrorNotFound } from './errors';
+import { ErrorBadRequest, ErrorCode, ErrorForbidden, ErrorNotFound } from './errors';
 import Router from './Router';
 import { AppContext, HttpMethod, RouteType } from './types';
 import { URL } from 'url';
@@ -28,6 +28,7 @@ export enum RouteResponseFormat {
 	Json = 'json',
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 export type RouteHandler = (path: SubPath, ctx: AppContext, ...args: any[])=> Promise<any>;
 
 export interface Routers {
@@ -55,8 +56,10 @@ export enum ResponseType {
 
 export class Response {
 	public type: ResponseType;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	public response: any;
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	public constructor(type: ResponseType, response: any) {
 		this.type = type;
 		this.response = response;
@@ -115,7 +118,7 @@ export function isPathBasedAddressing(fileId: string): boolean {
 
 export const urlMatchesSchema = (url: string, schema: string): boolean => {
 	url = stripOffQueryParameters(url);
-	const regex = new RegExp(`${schema.replace(/:id/, '[a-zA-Z0-9]+')}$`);
+	const regex = new RegExp(`${schema.replace(/:id/, '[a-zA-Z0-9_]+')}$`);
 	return !!url.match(regex);
 };
 
@@ -197,6 +200,7 @@ function disabledAccountCheck(route: MatchedRoute, user: User) {
 }
 
 interface ExecRequestResult {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	response: any;
 	path: SubPath;
 }
@@ -206,7 +210,7 @@ export async function execRequest(routes: Routers, ctx: AppContext): Promise<Exe
 	if (!match) throw new ErrorNotFound();
 
 	const endPoint = match.route.findEndPoint(ctx.request.method as HttpMethod, match.subPath.schema);
-	if (ctx.URL && !isValidOrigin(ctx.URL.origin, baseUrl(endPoint.type), endPoint.type)) throw new ErrorNotFound(`Invalid origin: ${ctx.URL.origin}`, 'invalidOrigin');
+	if (ctx.URL && !isValidOrigin(ctx.URL.origin, baseUrl(endPoint.type), endPoint.type)) throw new ErrorNotFound(`Invalid origin: ${ctx.URL.origin}`, ErrorCode.InvalidOrigin);
 
 	const isPublicRoute = match.route.isPublic(match.subPath.schema);
 
@@ -295,6 +299,7 @@ export function findMatchingRoute(path: string, routes: Routers): MatchedRoute {
 	throw new Error('Unreachable');
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 export function respondWithItemContent(koaResponse: any, item: Item, content: Buffer): Response {
 	koaResponse.body = item.jop_type > 0 ? content.toString() : content;
 	koaResponse.set('Content-Type', item.mime_type);
@@ -309,6 +314,7 @@ export enum UrlType {
 	Privacy = 'privacy',
 	Tasks = 'admin/tasks',
 	UserDeletions = 'admin/user_deletions',
+	Reports = 'admin/reports',
 }
 
 export function makeUrl(urlType: UrlType): string {

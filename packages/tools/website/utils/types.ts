@@ -1,10 +1,17 @@
 import { Plan, StripePublicConfig } from '@joplin/lib/utils/joplinCloud';
 import { Sponsors } from '../../utils/loadSponsors';
+import { Translations } from '../../utils/translation';
 import { OpenGraphTags } from './openGraph';
 
 export enum Env {
 	Dev = 'dev',
 	Prod = 'prod',
+}
+
+export interface Locale {
+	htmlTranslations: Translations;
+	lang: string;
+	pathPrefix: string;
 }
 
 export interface GithubUser {
@@ -62,6 +69,7 @@ export interface TemplateParams {
 	showBottomLinks?: boolean;
 	openGraph: OpenGraphTags;
 	isNews?: boolean;
+	locale?: Locale;
 }
 
 export interface PlanPageParams extends TemplateParams {
