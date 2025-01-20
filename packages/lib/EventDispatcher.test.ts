@@ -1,9 +1,9 @@
 import EventDispatcher from './EventDispatcher';
 
 enum TestKey {
-    FooEvent,
-    BarEvent,
-    BazEvent,
+	FooEvent,
+	BarEvent,
+	BazEvent,
 }
 
 describe('EventDispatcher', () => {
@@ -126,12 +126,12 @@ describe('EventDispatcher', () => {
 		const dispatcher = new Dispatcher();
 
 		let pass = false;
-		dispatcher.on('Evnt', () => {
+		dispatcher.on('Event', () => {
 			pass = true;
 		});
 
 		expect(pass).toBe(false);
-		dispatcher.dispatch('Evnt');
+		dispatcher.dispatch('Event');
 		expect(pass).toBe(true);
 	});
 });

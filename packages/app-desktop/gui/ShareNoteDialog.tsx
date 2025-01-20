@@ -16,18 +16,20 @@ import { connect } from 'react-redux';
 import { AppState } from '../app.reducer';
 import { getEncryptionEnabled } from '@joplin/lib/services/synchronizer/syncInfoUtils';
 import SyncTargetRegistry from '@joplin/lib/SyncTargetRegistry';
+import shim from '@joplin/lib/shim';
 const { clipboard } = require('electron');
 
 interface Props {
 	themeId: number;
-	noteIds: Array<string>;
+	noteIds: string[];
+	// eslint-disable-next-line @typescript-eslint/ban-types -- Old code before rule was applied
 	onClose: Function;
 	shares: StateShare[];
 	syncTargetId: number;
 }
 
 function styles_(props: Props) {
-	return buildStyle('ShareNoteDialog', props.themeId, (theme: any) => {
+	return buildStyle('ShareNoteDialog', props.themeId, theme => {
 		return {
 			root: {
 				minWidth: 500,
@@ -145,13 +147,14 @@ export function ShareNoteDialog(props: Props) {
 				reg.logger().error('ShareNoteDialog: Cannot publish note:', error);
 
 				setSharesState('idle');
-				alert(JoplinServerApi.connectionErrorMessage(error));
+				void shim.showErrorDialog(JoplinServerApi.connectionErrorMessage(error));
 			}
 
 			break;
 		}
 	}, [recursiveShare, notes]);
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	const unshareNoteButton_click = async (event: any) => {
 		await ShareService.instance().unshareNote(event.noteId);
 		await ShareService.instance().refreshShares();
@@ -169,6 +172,7 @@ export function ShareNoteDialog(props: Props) {
 		);
 	};
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	const renderNoteList = (notes: any) => {
 		const noteComps = [];
 		for (const note of notes) {
@@ -223,7 +227,7 @@ export function ShareNoteDialog(props: Props) {
 	};
 
 	return (
-		<Dialog renderContent={renderContent}/>
+		<Dialog>{renderContent()}</Dialog>
 	);
 }
 
@@ -234,4 +238,4 @@ const mapStateToProps = (state: AppState) => {
 	};
 };
 
-export default connect(mapStateToProps)(ShareNoteDialog as any);
+export default connect(mapStateToProps)(ShareNoteDialog);

@@ -1,3 +1,5 @@
+/* eslint-disable multiline-comment-style */
+
 import Plugin from '../Plugin';
 import JoplinData from './JoplinData';
 import JoplinPlugins from './JoplinPlugins';
@@ -11,6 +13,7 @@ import JoplinContentScripts from './JoplinContentScripts';
 import JoplinClipboard from './JoplinClipboard';
 import JoplinWindow from './JoplinWindow';
 import BasePlatformImplementation from '../BasePlatformImplementation';
+import JoplinImaging from './JoplinImaging';
 
 /**
  * This is the main entry point to the Joplin API. You can access various services using the provided accessors.
@@ -28,6 +31,7 @@ export default class Joplin {
 
 	private data_: JoplinData = null;
 	private plugins_: JoplinPlugins = null;
+	private imaging_: JoplinImaging = null;
 	private workspace_: JoplinWorkspace = null;
 	private filters_: JoplinFilters = null;
 	private commands_: JoplinCommands = null;
@@ -39,19 +43,21 @@ export default class Joplin {
 	private window_: JoplinWindow = null;
 	private implementation_: BasePlatformImplementation = null;
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	public constructor(implementation: BasePlatformImplementation, plugin: Plugin, store: any) {
 		this.implementation_ = implementation;
-		this.data_ = new JoplinData();
+		this.data_ = new JoplinData(plugin);
 		this.plugins_ = new JoplinPlugins(plugin);
-		this.workspace_ = new JoplinWorkspace(store);
+		this.imaging_ = new JoplinImaging(implementation.imaging);
+		this.workspace_ = new JoplinWorkspace(plugin, store);
 		this.filters_ = new JoplinFilters();
-		this.commands_ = new JoplinCommands();
+		this.commands_ = new JoplinCommands(plugin);
 		this.views_ = new JoplinViews(implementation.joplin.views, plugin, store);
 		this.interop_ = new JoplinInterop();
 		this.settings_ = new JoplinSettings(plugin);
 		this.contentScripts_ = new JoplinContentScripts(plugin);
 		this.clipboard_ = new JoplinClipboard(implementation.clipboard, implementation.nativeImage);
-		this.window_ = new JoplinWindow(implementation.window, plugin, store);
+		this.window_ = new JoplinWindow(plugin, store);
 	}
 
 	public get data(): JoplinData {
@@ -60,6 +66,10 @@ export default class Joplin {
 
 	public get clipboard(): JoplinClipboard {
 		return this.clipboard_;
+	}
+
+	public get imaging(): JoplinImaging {
+		return this.imaging_;
 	}
 
 	public get window(): JoplinWindow {
@@ -115,7 +125,10 @@ export default class Joplin {
 	 * - [fs-extra](https://www.npmjs.com/package/fs-extra)
 	 *
 	 * [View the demo plugin](https://github.com/laurent22/joplin/tree/dev/packages/app-cli/tests/support/plugins/nativeModule)
+	 *
+	 * <span class="platform-desktop">desktop</span>
 	 */
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	public require(_path: string): any {
 		// Just a stub. Implementation has to be done within plugin process, in plugin_index.js
 	}

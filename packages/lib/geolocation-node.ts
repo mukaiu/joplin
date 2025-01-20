@@ -1,4 +1,4 @@
-import Logger from './Logger';
+import Logger from '@joplin/utils/Logger';
 import shim from './shim';
 
 const logger = Logger.create('geolocation-node');
@@ -18,6 +18,7 @@ interface CurrentPositionOptions {}
 
 type GeoipService = ()=> Promise<CurrentPositionResponse>;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 const fetchJson = async (url: string): Promise<any> => {
 	let r = await shim.fetch(url);
 	if (!r.ok) throw new Error(`Could not get geolocation: ${await r.text()}`);

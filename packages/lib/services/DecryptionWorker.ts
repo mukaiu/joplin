@@ -3,7 +3,7 @@ import BaseModel from '../BaseModel';
 import MasterKey from '../models/MasterKey';
 import Resource from '../models/Resource';
 import ResourceService from './ResourceService';
-import Logger from '../Logger';
+import Logger from '@joplin/utils/Logger';
 import shim from '../shim';
 import KvStore from './KvStore';
 import EncryptionService from './e2ee/EncryptionService';
@@ -14,6 +14,7 @@ interface DecryptionResult {
 	skippedItemCount?: number;
 	decryptedItemCounts?: number;
 	decryptedItemCount?: number;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	error: any;
 }
 
@@ -21,10 +22,13 @@ export default class DecryptionWorker {
 
 	public static instance_: DecryptionWorker = null;
 
-	private state_: string = 'idle';
+	private state_ = 'idle';
 	private logger_: Logger;
+	// eslint-disable-next-line @typescript-eslint/ban-types -- Old code before rule was applied
 	public dispatch: Function = () => {};
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	private scheduleId_: any = null;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	private eventEmitter_: any;
 	private kvStore_: KvStore = null;
 	private maxDecryptionAttempts_ = 2;
@@ -45,10 +49,12 @@ export default class DecryptionWorker {
 		return this.logger_;
 	}
 
+	// eslint-disable-next-line @typescript-eslint/ban-types -- Old code before rule was applied
 	public on(eventName: string, callback: Function) {
 		return this.eventEmitter_.on(eventName, callback);
 	}
 
+	// eslint-disable-next-line @typescript-eslint/ban-types -- Old code before rule was applied
 	public off(eventName: string, callback: Function) {
 		return this.eventEmitter_.removeListener(eventName, callback);
 	}
@@ -59,6 +65,7 @@ export default class DecryptionWorker {
 		return DecryptionWorker.instance_;
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	public setEncryptionService(v: any) {
 		this.encryptionService_ = v;
 	}
@@ -109,12 +116,14 @@ export default class DecryptionWorker {
 		await this.kvStore().deleteByPrefix('decrypt:');
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	public dispatchReport(report: any) {
-		const action = Object.assign({}, report);
+		const action = { ...report };
 		action.type = 'DECRYPTION_WORKER_SET';
 		this.dispatch(action);
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	private async start_(options: any = null): Promise<DecryptionResult> {
 		if (options === null) options = {};
 		if (!('masterKeyNotLoadedHandler' in options)) options.masterKeyNotLoadedHandler = 'throw';
@@ -160,6 +169,7 @@ export default class DecryptionWorker {
 		this.state_ = 'started';
 
 		const excludedIds = [];
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 		const decryptedItemCounts: any = {};
 		let skippedItemCount = 0;
 
@@ -167,7 +177,7 @@ export default class DecryptionWorker {
 		this.dispatchReport({ state: 'started' });
 
 		try {
-			const notLoadedMasterKeyDisptaches = [];
+			const notLoadedMasterKeyDispatches = [];
 
 			while (true) {
 				const result: ItemsThatNeedDecryptionResult = await BaseItem.itemsThatNeedDecryption(excludedIds);
@@ -227,12 +237,12 @@ export default class DecryptionWorker {
 						excludedIds.push(item.id);
 
 						if (error.code === 'masterKeyNotLoaded' && options.masterKeyNotLoadedHandler === 'dispatch') {
-							if (notLoadedMasterKeyDisptaches.indexOf(error.masterKeyId) < 0) {
+							if (notLoadedMasterKeyDispatches.indexOf(error.masterKeyId) < 0) {
 								this.dispatch({
 									type: 'MASTERKEY_ADD_NOT_LOADED',
 									id: error.masterKeyId,
 								});
-								notLoadedMasterKeyDisptaches.push(error.masterKeyId);
+								notLoadedMasterKeyDispatches.push(error.masterKeyId);
 							}
 							await clearDecryptionCounter();
 							continue;
@@ -280,7 +290,7 @@ export default class DecryptionWorker {
 			error: null,
 		};
 
-		this.dispatchReport(Object.assign({}, finalReport, { state: 'idle' }));
+		this.dispatchReport({ ...finalReport, state: 'idle' });
 
 		if (downloadedButEncryptedBlobCount) {
 			this.logger().info(`DecryptionWorker: Some resources have been downloaded but are not decrypted yet. Scheduling another decryption. Resource count: ${downloadedButEncryptedBlobCount}`);
@@ -290,6 +300,7 @@ export default class DecryptionWorker {
 		return finalReport;
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	public async start(options: any = {}) {
 		this.startCalls_.push(true);
 		let output = null;

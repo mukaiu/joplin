@@ -1,17 +1,25 @@
 import * as React from 'react';
-import Logger from '@joplin/lib/Logger';
+import { DragEventHandler, KeyboardEventHandler, UIEventHandler } from 'react';
 
-const logger = Logger.create('ItemList');
-
-interface Props {
-	style: any;
+interface Props<ItemType> {
+	style: React.CSSProperties & { height: number };
 	itemHeight: number;
-	items: any[];
+	items: ItemType[];
+
 	disabled?: boolean;
-	onKeyDown?: Function;
-	itemRenderer: Function;
 	className?: string;
-	onNoteDrop?: Function;
+
+	itemRenderer: (item: ItemType, index: number)=> React.JSX.Element;
+	renderContentWrapper?: (listItems: React.ReactNode[])=> React.ReactNode;
+	onKeyDown?: KeyboardEventHandler<HTMLElement>;
+	onItemDrop?: DragEventHandler<HTMLElement>;
+
+	selectedIndex?: number;
+	alwaysRenderSelection?: boolean;
+
+	id?: string;
+	role?: string;
+	'aria-label'?: string;
 }
 
 interface State {
@@ -19,15 +27,15 @@ interface State {
 	bottomItemIndex: number;
 }
 
-class ItemList extends React.Component<Props, State> {
+class ItemList<ItemType> extends React.Component<Props<ItemType>, State> {
 
-	private scrollTop_: number;
-	private listRef: any;
+	private lastScrollTop_: number;
+	private listRef: React.MutableRefObject<HTMLDivElement>;
 
-	public constructor(props: Props) {
+	public constructor(props: Props<ItemType>) {
 		super(props);
 
-		this.scrollTop_ = 0;
+		this.lastScrollTop_ = 0;
 
 		this.listRef = React.createRef();
 
@@ -36,28 +44,19 @@ class ItemList extends React.Component<Props, State> {
 		this.onDrop = this.onDrop.bind(this);
 	}
 
-	public visibleItemCount(props: Props = undefined) {
+	public visibleItemCount(props: Props<ItemType> = undefined) {
 		if (typeof props === 'undefined') props = this.props;
 		return Math.ceil(props.style.height / props.itemHeight);
 	}
 
-	public updateStateItemIndexes(props: Props = undefined) {
+	public updateStateItemIndexes(props: Props<ItemType> = undefined) {
 		if (typeof props === 'undefined') props = this.props;
 
-		const topItemIndex = Math.floor(this.scrollTop_ / props.itemHeight);
+		const topItemIndex = Math.floor(this.offsetScroll() / props.itemHeight);
 		const visibleItemCount = this.visibleItemCount(props);
 
-		let bottomItemIndex = topItemIndex + (visibleItemCount - 1);
+		let bottomItemIndex = topItemIndex + visibleItemCount;
 		if (bottomItemIndex >= props.items.length) bottomItemIndex = props.items.length - 1;
-
-		// EDGE CASE:
-		// ref: https://github.com/laurent22/joplin/issues/4124
-		// when the note list is hidden, visibleItemCount is negative, and scroll top is positive when a note is selected
-		if (visibleItemCount < 0 && this.scrollTop_ > 0) {
-			logger.warn('Resetting scrollTop to 0. visibleItemCount is negative, scrollTop is positive.');
-			// we will reset the scroll top so that there is no blank space at the top of note list
-			this.scrollTop_ = 0;
-		}
 
 		this.setState({
 			topItemIndex: topItemIndex,
@@ -70,64 +69,69 @@ class ItemList extends React.Component<Props, State> {
 	}
 
 	public offsetScroll() {
-		return this.scrollTop_;
+		return this.container?.scrollTop ?? this.lastScrollTop_;
+	}
+
+	public get container() {
+		return this.listRef.current;
 	}
 
 	public UNSAFE_componentWillMount() {
 		this.updateStateItemIndexes();
 	}
 
-	public UNSAFE_componentWillReceiveProps(newProps: Props) {
+	public UNSAFE_componentWillReceiveProps(newProps: Props<ItemType>) {
 		this.updateStateItemIndexes(newProps);
 	}
 
-	public componentDidUpdate(): void {
-		// EDGE CASE
-		// scroll top is not updated when item list visibility is toggled
-		// if the user was at the bottom of the item list before hiding, blank spaces are added at the bottom of the item list
-		if (this.offsetScroll() !== this.listRef.current?.scrollTop) {
-			logger.warn(`scrollTop mismatch. Updating scrollTop with current listRef scrollTop(${this.listRef.current.scrollTop})`);
-			// update scroll postion once if there is a mismatch in scroll position after showing item list
-			this.onScroll({
-				target: {
-					scrollTop: this.listRef.current.scrollTop,
-				},
-			});
-		}
-	}
-
-	public onScroll(event: any) {
-		this.scrollTop_ = event.target.scrollTop;
+	public onScroll: UIEventHandler<HTMLDivElement> = event => {
+		this.lastScrollTop_ = (event.target as HTMLElement).scrollTop;
 		this.updateStateItemIndexes();
-	}
+	};
 
-	public onKeyDown(event: any) {
+	public onKeyDown: KeyboardEventHandler<HTMLElement> = event => {
 		if (this.props.onKeyDown) this.props.onKeyDown(event);
+	};
+
+	public onDrop: DragEventHandler<HTMLElement> = event => {
+		if (this.props.onItemDrop) this.props.onItemDrop(event);
+	};
+
+	public get firstVisibleIndex() {
+		return Math.min(this.props.items.length - 1, this.state.topItemIndex);
 	}
 
-	public onDrop(event: any) {
-		if (this.props.onNoteDrop) this.props.onNoteDrop(event);
+	public get lastVisibleIndex() {
+		return Math.max(0, this.state.bottomItemIndex);
+	}
+
+	public isIndexVisible(itemIndex: number) {
+		return itemIndex >= this.firstVisibleIndex && itemIndex <= this.lastVisibleIndex;
 	}
 
 	public makeItemIndexVisible(itemIndex: number) {
-		const top = Math.min(this.props.items.length - 1, this.state.topItemIndex);
-		const bottom = Math.max(0, this.state.bottomItemIndex);
+		// The first and last visible indices are often partially out of view and can thus be made more visible
+		if (this.isIndexVisible(itemIndex) && itemIndex !== this.lastVisibleIndex && itemIndex !== this.firstVisibleIndex) {
+			return;
+		}
 
-		if (itemIndex >= top && itemIndex <= bottom) return;
-
-		let scrollTop = 0;
-		if (itemIndex < top) {
+		const currentScroll = this.offsetScroll();
+		let scrollTop = currentScroll;
+		if (itemIndex <= this.firstVisibleIndex) {
 			scrollTop = this.props.itemHeight * itemIndex;
-		} else {
-			scrollTop = this.props.itemHeight * itemIndex - (this.visibleItemCount() - 1) * this.props.itemHeight;
+		} else if (itemIndex >= this.lastVisibleIndex - 1) {
+			const scrollBottom = this.props.itemHeight * (itemIndex + 1);
+			scrollTop = scrollBottom - this.props.style.height;
 		}
 
 		if (scrollTop < 0) scrollTop = 0;
 
-		this.scrollTop_ = scrollTop;
-		this.listRef.current.scrollTop = scrollTop;
+		if (currentScroll !== scrollTop) {
+			this.lastScrollTop_ = scrollTop;
+			this.listRef.current.scrollTop = scrollTop;
 
-		this.updateStateItemIndexes();
+			this.updateStateItemIndexes();
+		}
 	}
 
 	// shouldComponentUpdate(nextProps, nextState) {
@@ -148,10 +152,11 @@ class ItemList extends React.Component<Props, State> {
 
 	public render() {
 		const items = this.props.items;
-		const style = Object.assign({}, this.props.style, {
+		const style: React.CSSProperties = {
+			...this.props.style,
 			overflowX: 'hidden',
 			overflowY: 'auto',
-		});
+		};
 
 		// if (this.props.disabled) style.opacity = 0.5;
 
@@ -161,21 +166,57 @@ class ItemList extends React.Component<Props, State> {
 			return <div key={key} style={{ height: height }}></div>;
 		};
 
-		const itemComps = [blankItem('top', this.state.topItemIndex * this.props.itemHeight)];
+		type RenderRange = { from: number; to: number };
+		const renderableBlocks: RenderRange[] = [];
 
-		for (let i = this.state.topItemIndex; i <= this.state.bottomItemIndex; i++) {
-			const itemComp = this.props.itemRenderer(items[i], i);
-			itemComps.push(itemComp);
+		if (this.props.alwaysRenderSelection && isFinite(this.props.selectedIndex)) {
+			const selectionVisible = this.props.selectedIndex >= this.state.topItemIndex && this.props.selectedIndex <= this.state.bottomItemIndex;
+			const isValidSelection = this.props.selectedIndex >= 0 && this.props.selectedIndex < items.length;
+			if (!selectionVisible && isValidSelection) {
+				renderableBlocks.push({ from: this.props.selectedIndex, to: this.props.selectedIndex });
+			}
 		}
 
-		itemComps.push(blankItem('bottom', (items.length - this.state.bottomItemIndex - 1) * this.props.itemHeight));
+		renderableBlocks.push({ from: this.state.topItemIndex, to: this.state.bottomItemIndex });
+
+		// Ascending order
+		renderableBlocks.sort(({ from: fromA }, { from: fromB }) => fromA - fromB);
+
+		const itemComps: React.ReactNode[] = [];
+		for (let i = 0; i < renderableBlocks.length; i++) {
+			const currentBlock = renderableBlocks[i];
+			if (i === 0) {
+				itemComps.push(blankItem('top', currentBlock.from * this.props.itemHeight));
+			}
+
+			for (let j = currentBlock.from; j <= currentBlock.to; j++) {
+				const itemComp = this.props.itemRenderer(items[j], j);
+				itemComps.push(itemComp);
+			}
+
+			const nextBlockFrom = i + 1 < renderableBlocks.length ? renderableBlocks[i + 1].from : items.length;
+			itemComps.push(blankItem(`after-${i}`, (nextBlockFrom - currentBlock.to - 1) * this.props.itemHeight));
+		}
 
 		const classes = ['item-list'];
 		if (this.props.className) classes.push(this.props.className);
 
+		const wrapContent = this.props.renderContentWrapper ?? ((children) => <>{children}</>);
 		return (
-			<div ref={this.listRef} className={classes.join(' ')} style={style} onScroll={this.onScroll} onKeyDown={this.onKeyDown} onDrop={this.onDrop}>
-				{itemComps}
+			<div
+				ref={this.listRef}
+				className={classes.join(' ')}
+				style={style}
+
+				id={this.props.id}
+				role={this.props.role}
+				aria-label={this.props['aria-label']}
+
+				onScroll={this.onScroll}
+				onKeyDown={this.onKeyDown}
+				onDrop={this.onDrop}
+			>
+				{wrapContent(itemComps)}
 			</div>
 		);
 	}

@@ -4,7 +4,9 @@ import { basicDelta, MultiPutItem } from './file-api';
 
 export default class FileApiDriverMemory {
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	private items_: any[];
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	private deletedItems_: any[];
 
 	public constructor() {
@@ -12,6 +14,7 @@ export default class FileApiDriverMemory {
 		this.deletedItems_ = [];
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	private encodeContent_(content: any) {
 		if (content instanceof Buffer) {
 			return content.toString('base64');
@@ -28,7 +31,9 @@ export default class FileApiDriverMemory {
 		return true;
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	private decodeContent_(content: any) {
+		if (!content) return '';
 		return Buffer.from(content, 'base64').toString('utf-8');
 	}
 
@@ -57,9 +62,10 @@ export default class FileApiDriverMemory {
 
 	public stat(path: string) {
 		const item = this.itemByPath(path);
-		return Promise.resolve(item ? Object.assign({}, item) : null);
+		return Promise.resolve(item ? { ...item } : null);
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	public async setTimestamp(path: string, timestampMs: number): Promise<any> {
 		const item = this.itemByPath(path);
 		if (!item) return Promise.reject(new Error(`File not found: ${path}`));
@@ -75,7 +81,7 @@ export default class FileApiDriverMemory {
 			if (item.path.indexOf(`${path}/`) === 0) {
 				const s = item.path.substr(path.length + 1);
 				if (s.split('/').length === 1) {
-					const it = Object.assign({}, item);
+					const it = { ...item };
 					it.path = it.path.substr(path.length + 1);
 					output.push(it);
 				}
@@ -89,6 +95,7 @@ export default class FileApiDriverMemory {
 		});
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	public async get(path: string, options: any) {
 		const item = this.itemByPath(path);
 		if (!item) return Promise.resolve(null);
@@ -111,6 +118,7 @@ export default class FileApiDriverMemory {
 		this.items_.push(this.newItem(path, true));
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	public async put(path: string, content: any, options: any = null) {
 		if (!options) options = {};
 
@@ -129,7 +137,9 @@ export default class FileApiDriverMemory {
 		}
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	public async multiPut(items: MultiPutItem[], options: any = null) {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 		const output: any = {
 			items: {},
 		};
@@ -155,7 +165,7 @@ export default class FileApiDriverMemory {
 	public async delete(path: string) {
 		const index = this.itemIndexByPath(path);
 		if (index >= 0) {
-			const item = Object.assign({}, this.items_[index]);
+			const item = { ...this.items_[index] };
 			item.isDeleted = true;
 			item.updated_time = time.unixMs();
 			this.deletedItems_.push(item);
@@ -163,6 +173,7 @@ export default class FileApiDriverMemory {
 		}
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	public async move(oldPath: string, newPath: string): Promise<any> {
 		const sourceItem = this.itemByPath(oldPath);
 		if (!sourceItem) return Promise.reject(new Error(`Path not found: ${oldPath}`));
@@ -174,11 +185,12 @@ export default class FileApiDriverMemory {
 		this.items_ = [];
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	public async delta(path: string, options: any = null) {
 		const getStatFn = async (path: string) => {
 			const output = this.items_.slice();
 			for (let i = 0; i < output.length; i++) {
-				const item = Object.assign({}, output[i]);
+				const item = { ...output[i] };
 				item.path = item.path.substr(path.length + 1);
 				output[i] = item;
 			}

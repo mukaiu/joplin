@@ -1,9 +1,10 @@
-import { useEffect } from 'react';
-import { FormNote, ScrollOptionTypes } from './types';
-import editorCommandDeclarations from '../editorCommandDeclarations';
-import CommandService, { CommandDeclaration, CommandRuntime, CommandContext } from '@joplin/lib/services/CommandService';
+import { RefObject, useEffect } from 'react';
+import { NoteBodyEditorRef, OnChangeEvent, ScrollOptionTypes } from './types';
+import editorCommandDeclarations, { enabledCondition } from '../editorCommandDeclarations';
+import CommandService, { CommandDeclaration, CommandRuntime, CommandContext, RegisteredRuntime } from '@joplin/lib/services/CommandService';
 import time from '@joplin/lib/time';
 import { reg } from '@joplin/lib/registry';
+import getWindowCommandPriority from './getWindowCommandPriority';
 
 const commandsWithDependencies = [
 	require('../commands/showLocalSearch'),
@@ -12,19 +13,28 @@ const commandsWithDependencies = [
 	require('../commands/pasteAsText'),
 ];
 
+type OnBodyChange = (event: OnChangeEvent)=> void;
+
 interface HookDependencies {
-	formNote: FormNote;
+	// eslint-disable-next-line @typescript-eslint/ban-types -- Old code before rule was applied
 	setShowLocalSearch: Function;
+	// eslint-disable-next-line @typescript-eslint/ban-types -- Old code before rule was applied
 	dispatch: Function;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	noteSearchBarRef: any;
-	editorRef: any;
-	titleInputRef: any;
-	saveNoteAndWait: Function;
-	setFormNote: Function;
+	editorRef: RefObject<NoteBodyEditorRef>;
+	titleInputRef: RefObject<HTMLInputElement>;
+	onBodyChange: OnBodyChange;
+	containerRef: RefObject<HTMLDivElement|null>;
 }
 
-function editorCommandRuntime(declaration: CommandDeclaration, editorRef: any, setFormNote: Function): CommandRuntime {
+function editorCommandRuntime(
+	declaration: CommandDeclaration,
+	editorRef: RefObject<NoteBodyEditorRef>,
+	onBodyChange: OnBodyChange,
+): CommandRuntime {
 	return {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 		execute: async (_context: CommandContext, ...args: any[]) => {
 			if (!editorRef.current) {
 				reg.logger().warn('Received command, but editor is gone', declaration.name);
@@ -47,9 +57,7 @@ function editorCommandRuntime(declaration: CommandDeclaration, editorRef: any, s
 					value: args[0],
 				});
 			} else if (declaration.name === 'editor.setText') {
-				setFormNote((prev: FormNote) => {
-					return { ...prev, body: args[0] };
-				});
+				onBodyChange({ content: args[0], changeId: 0 });
 			} else {
 				return editorRef.current.execCommand({
 					name: declaration.name,
@@ -65,16 +73,24 @@ function editorCommandRuntime(declaration: CommandDeclaration, editorRef: any, s
 		// currently selected text.
 		//
 		// https://github.com/laurent22/joplin/issues/5707
-		enabledCondition: '(!modalDialogVisible || gotoAnythingVisible) && markdownEditorPaneVisible && oneNoteSelected && noteIsMarkdown',
+		enabledCondition: enabledCondition(declaration.name),
 	};
 }
 
 export default function useWindowCommandHandler(dependencies: HookDependencies) {
-	const { setShowLocalSearch, noteSearchBarRef, editorRef, titleInputRef, setFormNote } = dependencies;
+	const { setShowLocalSearch, noteSearchBarRef, editorRef, titleInputRef, onBodyChange, containerRef } = dependencies;
 
 	useEffect(() => {
+		const getRuntimePriority = () => getWindowCommandPriority(containerRef);
+
+		const deregisterCallbacks: RegisteredRuntime[] = [];
 		for (const declaration of editorCommandDeclarations) {
-			CommandService.instance().registerRuntime(declaration.name, editorCommandRuntime(declaration, editorRef, setFormNote));
+			const runtime = editorCommandRuntime(declaration, editorRef, onBodyChange);
+			deregisterCallbacks.push(CommandService.instance().registerRuntime(
+				declaration.name,
+				{ ...runtime, getPriority: getRuntimePriority },
+				true,
+			));
 		}
 
 		const dependencies = {
@@ -85,18 +101,18 @@ export default function useWindowCommandHandler(dependencies: HookDependencies) 
 		};
 
 		for (const command of commandsWithDependencies) {
-			CommandService.instance().registerRuntime(command.declaration.name, command.runtime(dependencies));
+			const runtime = command.runtime(dependencies);
+			deregisterCallbacks.push(CommandService.instance().registerRuntime(
+				command.declaration.name,
+				{ ...runtime, getPriority: getRuntimePriority },
+				true,
+			));
 		}
 
 		return () => {
-			for (const declaration of editorCommandDeclarations) {
-				CommandService.instance().unregisterRuntime(declaration.name);
-			}
-
-			for (const command of commandsWithDependencies) {
-				CommandService.instance().unregisterRuntime(command.declaration.name);
+			for (const runtime of deregisterCallbacks) {
+				runtime.deregister();
 			}
 		};
-		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
-	}, [editorRef, setShowLocalSearch, noteSearchBarRef, titleInputRef]);
+	}, [editorRef, setShowLocalSearch, noteSearchBarRef, titleInputRef, onBodyChange, containerRef]);
 }

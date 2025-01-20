@@ -1,4 +1,4 @@
-import Logger from '@joplin/lib/Logger';
+import Logger from '@joplin/utils/Logger';
 import { Pagination } from '../models/utils/pagination';
 import { Day, msleep } from '../utils/time';
 import BaseService from './BaseService';
@@ -12,7 +12,7 @@ export interface DeletionJobOptions {
 
 export default class UserDeletionService extends BaseService {
 
-	protected name_: string = 'UserDeletionService';
+	protected name_ = 'UserDeletionService';
 
 	private async deleteUserData(userId: Uuid, options: DeletionJobOptions) {
 		// While the "UserDeletionInProgress" flag is on, the account is
@@ -71,7 +71,7 @@ export default class UserDeletionService extends BaseService {
 				user,
 				flags,
 			}),
-			userId
+			userId,
 		);
 
 		await this.models.userFlag().add(userId, UserFlagType.UserDeletionInProgress);
@@ -104,6 +104,7 @@ export default class UserDeletionService extends BaseService {
 			return;
 		}
 
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 		let error: any = null;
 		let success = true;
 
@@ -130,7 +131,7 @@ export default class UserDeletionService extends BaseService {
 			{
 				processAccount: true,
 				processData: true,
-			}
+			},
 		);
 
 		if (addedUserIds.length) {

@@ -43,18 +43,17 @@ export class MarkupLanguageUtils {
 	// desktop and mobile applications.
 	public newMarkupToHtml(_plugins: PluginStates = null, options: Options = null) {
 		const subValues = Setting.subValues('markdown.plugin', Setting.toPlainObject());
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 		const pluginOptions: any = {};
 		for (const n in subValues) {
 			pluginOptions[n] = { enabled: subValues[n] };
 		}
 
-		options = Object.assign({
-			ResourceModel: Resource,
+		options = { ResourceModel: Resource,
 			pluginOptions: pluginOptions,
 			tempDir: Setting.value('tempDir'),
 			fsDriver: shim.fsDriver(),
-			isSafeMode: Setting.value('isSafeMode'),
-		}, options);
+			isSafeMode: Setting.value('isSafeMode'), ...options };
 
 		return new MarkupToHtml(options);
 	}

@@ -1,4 +1,4 @@
-const Logger = require('@joplin/lib/Logger').default;
+const Logger = require('@joplin/utils/Logger').default;
 const Folder = require('@joplin/lib/models/Folder').default;
 const BaseItem = require('@joplin/lib/models/BaseItem').default;
 const Tag = require('@joplin/lib/models/Tag').default;
@@ -31,7 +31,7 @@ const WindowWidget = require('tkwidgets/WindowWidget.js');
 const NoteWidget = require('./gui/NoteWidget.js');
 const ResourceServer = require('./ResourceServer.js');
 const NoteMetadataWidget = require('./gui/NoteMetadataWidget.js');
-const FolderListWidget = require('./gui/FolderListWidget.js');
+const FolderListWidget = require('./gui/FolderListWidget').default;
 const NoteListWidget = require('./gui/NoteListWidget.js');
 const StatusBarWidget = require('./gui/StatusBarWidget').default;
 const ConsoleWidget = require('./gui/ConsoleWidget.js');
@@ -302,7 +302,7 @@ class AppGui {
 		const output = [];
 
 		for (let i = 0; i < keymap.length; i++) {
-			const item = Object.assign({}, keymap[i]);
+			const item = { ...keymap[i] };
 
 			if (!item.command) throw new Error(`Missing command for keymap item: ${JSON.stringify(item)}`);
 
@@ -427,7 +427,7 @@ class AppGui {
 	async handleModelAction(action) {
 		this.logger().info('Action:', action);
 
-		const state = Object.assign({}, defaultState);
+		const state = { ...defaultState };
 		state.notes = this.widget('noteList').items;
 
 		const newState = reducer(state, action);
@@ -441,6 +441,7 @@ class AppGui {
 		if (cmd === 'activate') {
 			const w = this.widget('mainWindow').focusedWidget;
 			if (w.name === 'folderList') {
+				// eslint-disable-next-line no-restricted-properties
 				this.widget('noteList').focus();
 			} else if (w.name === 'noteList' || w.name === 'noteText') {
 				this.processPromptCommand('edit $n');
@@ -482,7 +483,7 @@ class AppGui {
 			if (this.linkSelector_.link) {
 				this.term_.moveTo(
 					this.linkSelector_.noteX + cursorOffsetX,
-					this.linkSelector_.noteY + cursorOffsetY
+					this.linkSelector_.noteY + cursorOffsetY,
 				);
 				shim.setTimeout(() => this.term_.term().inverse(this.linkSelector_.link), 50);
 			}

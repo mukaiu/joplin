@@ -6,10 +6,11 @@ require('source-map-support').install();
 
 const { stringify } = require('query-string');
 
-const execCommand = function(command: string, returnStdErr: boolean = false): Promise<string> {
+const execCommand = function(command: string, returnStdErr = false): Promise<string> {
 	const exec = require('child_process').exec;
 
 	return new Promise((resolve, reject) => {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 		exec(command, (error: any, stdout: any, stderr: any) => {
 			if (error) {
 				if (error.signal === 'SIGTERM') {
@@ -28,6 +29,7 @@ const execCommand = function(command: string, returnStdErr: boolean = false): Pr
 };
 
 async function sleep(seconds: number) {
+	// eslint-disable-next-line @typescript-eslint/ban-types -- Old code before rule was applied
 	return new Promise((resolve: Function) => {
 		setTimeout(() => {
 			resolve();
@@ -35,6 +37,7 @@ async function sleep(seconds: number) {
 	});
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 async function curl(method: string, path: string, query: object = null, body: any = null, headers: any = null, formFields: string[] = null, options: any = {}): Promise<any> {
 	const curlCmd: string[] = ['curl'];
 
@@ -91,8 +94,10 @@ function extractCurlResponse(rawResult: string) {
 
 const spawn = require('child_process').spawn;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 let serverProcess: any = null;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 function checkAndPrintResult(prefix: string, result: any) {
 	if (typeof result === 'object' && result && result.error) throw new Error(`${prefix}: ${JSON.stringify(result)}`);
 	console.info(prefix, result);
@@ -124,7 +129,6 @@ async function main() {
 	serverProcess = spawn('node', serverCommandParams, {
 		detached: true,
 		stdio: 'inherit',
-		// env: Object.assign({}, process.env, { NODE_ENV: 'testing' }),
 	});
 
 	const cleanUp = () => {
@@ -139,6 +143,7 @@ async function main() {
 	});
 
 	try {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 		let response: any = null;
 
 		console.info('Waiting for server to be ready...');

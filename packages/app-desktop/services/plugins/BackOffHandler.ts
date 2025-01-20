@@ -1,4 +1,4 @@
-import Logger from '@joplin/lib/Logger';
+import Logger from '@joplin/utils/Logger';
 import time from '@joplin/lib/time';
 
 const logger = Logger.create('BackOffHandler');
@@ -62,6 +62,7 @@ export default class BackOffHandler {
 		return this.backOffIntervals_[effectiveIndex];
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	public async wait(path: string, args: any) {
 		const interval = this.backOffInterval();
 		if (!interval) return;

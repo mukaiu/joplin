@@ -1,13 +1,12 @@
 import { WithDates, WithUuid, databaseSchema, ItemType, Uuid, User } from '../services/database/types';
 import { DbConnection, QueryContext } from '../db';
 import TransactionHandler from '../utils/TransactionHandler';
-import uuidgen from '../utils/uuidgen';
+import { uuidgen } from '@joplin/lib/uuid';
 import { ErrorUnprocessableEntity, ErrorBadRequest } from '../utils/errors';
 import { Models, NewModelFactoryHandler } from './factory';
-import * as EventEmitter from 'events';
 import { Config, Env } from '../utils/types';
 import personalizedUserContentBaseUrl from '@joplin/lib/services/joplinServer/personalizedUserContentBaseUrl';
-import Logger from '@joplin/lib/Logger';
+import Logger from '@joplin/utils/Logger';
 import dbuuid from '../utils/dbuuid';
 import { defaultPagination, PaginatedResults, Pagination } from './utils/pagination';
 import { Knex } from 'knex';
@@ -25,7 +24,9 @@ export enum UuidType {
 export interface SaveOptions {
 	isNew?: boolean;
 	skipValidation?: boolean;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	validationRules?: any;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	previousItem?: any;
 	queryContext?: QueryContext;
 }
@@ -39,6 +40,7 @@ export interface AllPaginatedOptions extends LoadOptions {
 }
 
 export interface DeleteOptions {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	validationRules?: any;
 	allowNoOp?: boolean;
 	deletedItemUserIds?: Record<Uuid, Uuid[]>;
@@ -46,6 +48,7 @@ export interface DeleteOptions {
 
 export interface ValidateOptions {
 	isNew?: boolean;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	rules?: any;
 }
 
@@ -61,14 +64,15 @@ export default abstract class BaseModel<T> {
 
 	private defaultFields_: string[] = [];
 	private db_: DbConnection;
+	private dbSlave_: DbConnection;
 	private transactionHandler_: TransactionHandler;
 	private modelFactory_: NewModelFactoryHandler;
-	private static eventEmitter_: EventEmitter = null;
 	private config_: Config;
 	private savePoints_: SavePoint[] = [];
 
-	public constructor(db: DbConnection, modelFactory: NewModelFactoryHandler, config: Config) {
+	public constructor(db: DbConnection, dbSlave: DbConnection, modelFactory: NewModelFactoryHandler, config: Config) {
 		this.db_ = db;
+		this.dbSlave_ = dbSlave;
 		this.modelFactory_ = modelFactory;
 		this.config_ = config;
 
@@ -111,6 +115,10 @@ export default abstract class BaseModel<T> {
 		return this.db_;
 	}
 
+	public get dbSlave(): DbConnection {
+		return this.dbSlave_;
+	}
+
 	protected get defaultFields(): string[] {
 		if (!this.defaultFields_.length) {
 			this.defaultFields_ = Object.keys(databaseSchema[this.tableName]);
@@ -118,18 +126,11 @@ export default abstract class BaseModel<T> {
 		return this.defaultFields_.slice();
 	}
 
-	public static get eventEmitter(): EventEmitter {
-		if (!this.eventEmitter_) {
-			this.eventEmitter_ = new EventEmitter();
-		}
-		return this.eventEmitter_;
-	}
-
 	public async checkIfAllowed(_user: User, _action: AclAction, _resource: T = null): Promise<void> {
 		throw new Error('Must be overriden');
 	}
 
-	protected selectFields(options: LoadOptions, defaultFields: string[] = null, mainTable: string = '', requiredFields: string[] = []): string[] {
+	protected selectFields(options: LoadOptions, defaultFields: string[] = null, mainTable = '', requiredFields: string[] = []): string[] {
 		let output: string[] = [];
 		if (options && options.fields) {
 			output = options.fields;
@@ -205,7 +206,8 @@ export default abstract class BaseModel<T> {
 	//
 	// The `name` argument is only for debugging, so that any stuck transaction
 	// can be more easily identified.
-	protected async withTransaction<T>(fn: Function, name: string): Promise<T> {
+	// eslint-disable-next-line @typescript-eslint/ban-types -- Old code before rule was applied
+	protected async withTransaction<T>(fn: Function, name = ''): Promise<T> {
 		const debugSteps = false;
 		const debugTimeout = true;
 		const timeoutMs = 10000;
@@ -246,6 +248,7 @@ export default abstract class BaseModel<T> {
 	}
 
 	public async all(options: LoadOptions = {}): Promise<T[]> {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 		const rows: any[] = await this.db(this.tableName).select(this.selectFields(options));
 		return rows as T[];
 	}
@@ -288,6 +291,7 @@ export default abstract class BaseModel<T> {
 	public fromApiInput(object: T): T {
 		const blackList = ['updated_time', 'created_time', 'owner_id'];
 		const whiteList = Object.keys(databaseSchema[this.tableName]);
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 		const output: any = { ...object };
 
 		for (const f in object) {
@@ -318,13 +322,14 @@ export default abstract class BaseModel<T> {
 	protected async isNew(object: T, options: SaveOptions): Promise<boolean> {
 		if (options.isNew === false) return false;
 		if (options.isNew === true) return true;
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 		if ('id' in (object as any) && !(object as WithUuid).id) throw new Error('ID cannot be undefined or null');
 		return !(object as WithUuid).id;
 	}
 
 	public async save(object: T, options: SaveOptions = {}): Promise<T> {
 		if (!object) throw new Error('Object cannot be empty');
-		const toSave = Object.assign({}, object);
+		const toSave = { ...object };
 
 		const isNew = await this.isNew(object, options);
 
@@ -391,13 +396,13 @@ export default abstract class BaseModel<T> {
 	}
 
 	public async load(id: Uuid | number, options: LoadOptions = {}): Promise<T> {
-		if (!id) throw new Error('id cannot be empty');
+		if (!id) throw new ErrorBadRequest('id cannot be empty');
 
 		return this.db(this.tableName).select(options.fields || this.defaultFields).where({ id: id }).first();
 	}
 
 	public async delete(id: string | string[] | number | number[], options: DeleteOptions = {}): Promise<void> {
-		if (!id) throw new Error('id cannot be empty');
+		if (!id) throw new ErrorBadRequest('id cannot be empty');
 
 		const ids = (typeof id === 'string' || typeof id === 'number') ? [id] : id;
 

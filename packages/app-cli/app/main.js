@@ -10,7 +10,7 @@ if (compareVersion(nodeVersion, '10.0.0') < 0) {
 	process.exit(1);
 }
 
-const { app } = require('./app.js');
+const app = require('./app').default;
 const Folder = require('@joplin/lib/models/Folder').default;
 const Resource = require('@joplin/lib/models/Resource').default;
 const BaseItem = require('@joplin/lib/models/BaseItem').default;
@@ -20,16 +20,24 @@ const NoteTag = require('@joplin/lib/models/NoteTag').default;
 const MasterKey = require('@joplin/lib/models/MasterKey').default;
 const Setting = require('@joplin/lib/models/Setting').default;
 const Revision = require('@joplin/lib/models/Revision').default;
-const Logger = require('@joplin/lib/Logger').default;
+const Logger = require('@joplin/utils/Logger').default;
 const FsDriverNode = require('@joplin/lib/fs-driver-node').default;
-const sharp = require('sharp');
 const { shimInit } = require('@joplin/lib/shim-init-node.js');
 const shim = require('@joplin/lib/shim').default;
 const { _ } = require('@joplin/lib/locale');
-const { FileApiDriverLocal } = require('@joplin/lib/file-api-driver-local');
+const FileApiDriverLocal = require('@joplin/lib/file-api-driver-local').default;
 const EncryptionService = require('@joplin/lib/services/e2ee/EncryptionService').default;
 const envFromArgs = require('@joplin/lib/envFromArgs');
 const nodeSqlite = require('sqlite3');
+const initLib = require('@joplin/lib/initLib').default;
+
+let sharp = null;
+try {
+	sharp = require('sharp');
+} catch (error) {
+	// Don't print an error or it will pollute stdout every time the app is started. A warning will
+	// be printed in app.ts
+}
 
 const env = envFromArgs(process.argv);
 
@@ -66,6 +74,10 @@ function appVersion() {
 }
 
 shimInit({ sharp, keytar, appVersion, nodeSqlite });
+
+const logger = new Logger();
+Logger.initializeGlobalLogger(logger);
+initLib(logger);
 
 const application = app();
 

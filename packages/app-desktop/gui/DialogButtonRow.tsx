@@ -23,6 +23,7 @@ interface Props {
 	cancelButtonDisabled?: boolean;
 	okButtonShow?: boolean;
 	okButtonLabel?: string;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	okButtonRef?: any;
 	okButtonDisabled?: boolean;
 	customButtons?: ButtonSpec[];
@@ -59,7 +60,7 @@ export default function DialogButtonRow(props: Props) {
 			buttonComps.push(
 				<button key={b.name} style={buttonStyle} onClick={() => onCustomButtonClick({ buttonName: b.name })} onKeyDown={onKeyDown}>
 					{b.label}
-				</button>
+				</button>,
 			);
 		}
 	}
@@ -68,15 +69,15 @@ export default function DialogButtonRow(props: Props) {
 		buttonComps.push(
 			<button disabled={props.okButtonDisabled} key="ok" style={buttonStyle} onClick={onOkButtonClick} ref={props.okButtonRef} onKeyDown={onKeyDown}>
 				{props.okButtonLabel ? props.okButtonLabel : _('OK')}
-			</button>
+			</button>,
 		);
 	}
 
 	if (props.cancelButtonShow !== false) {
 		buttonComps.push(
-			<button disabled={props.cancelButtonDisabled} key="cancel" style={Object.assign({}, buttonStyle)} onClick={onCancelButtonClick}>
+			<button disabled={props.cancelButtonDisabled} key="cancel" style={{ ...buttonStyle }} onClick={onCancelButtonClick}>
 				{props.cancelButtonLabel ? props.cancelButtonLabel : _('Cancel')}
-			</button>
+			</button>,
 		);
 	}
 

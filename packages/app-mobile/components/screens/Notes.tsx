@@ -1,82 +1,112 @@
-const React = require('react');
-import { AppState as RNAppState, View, StyleSheet, NativeEventSubscription } from 'react-native';
+import * as React from 'react';
+import { AppState as RNAppState, View, StyleSheet, NativeEventSubscription, ViewStyle, TextStyle } from 'react-native';
 import { stateUtils } from '@joplin/lib/reducer';
 import { connect } from 'react-redux';
-const { NoteList } = require('../note-list.js');
+import NoteList from '../NoteList';
 import Folder from '@joplin/lib/models/Folder';
 import Tag from '@joplin/lib/models/Tag';
-import Note from '@joplin/lib/models/Note';
+import Note, { PreviewsOrder } from '@joplin/lib/models/Note';
 import Setting from '@joplin/lib/models/Setting';
-const { themeStyle } = require('../global-style.js');
-import { ScreenHeader } from '../ScreenHeader';
+import { themeStyle } from '../global-style';
+import { FolderPickerOptions, ScreenHeader } from '../ScreenHeader';
 import { _ } from '@joplin/lib/locale';
-import ActionButton from '../ActionButton';
-const { dialogs } = require('../../utils/dialogs.js');
-const DialogBox = require('react-native-dialogbox').default;
-const { BaseScreenComponent } = require('../base-screen.js');
-const { BackButtonService } = require('../../services/back-button.js');
+import ActionButton from '../buttons/FloatingActionButton';
+import { BaseScreenComponent } from '../base-screen';
 import { AppState } from '../../utils/types';
+import { FolderEntity, NoteEntity, TagEntity } from '@joplin/lib/services/database/types';
+import { itemIsInTrash } from '@joplin/lib/services/trash';
+import AccessibleView from '../accessibility/AccessibleView';
+import { Dispatch } from 'redux';
+import { DialogContext, DialogControl } from '../DialogManager';
+import { useContext } from 'react';
+import { MenuChoice } from '../DialogManager/types';
 
-class NotesScreenComponent extends BaseScreenComponent<any> {
+interface Props {
+	dispatch: Dispatch;
 
+	themeId: number;
+	visible: boolean;
+
+	folders: FolderEntity[];
+	tags: TagEntity[];
+	notesSource: string;
+	notesOrder: PreviewsOrder[];
+	uncompletedTodosOnTop: boolean;
+	showCompletedTodos: boolean;
+	noteSelectionEnabled: boolean;
+
+	selectedNoteIds: string[];
+	activeFolderId: string;
+	selectedFolderId: string;
+	selectedTagId: string;
+	selectedSmartFilterId: string;
+	notesParentType: string;
+}
+
+interface State {
+
+}
+
+interface ComponentProps extends Props {
+	dialogManager: DialogControl;
+}
+
+type Styles = Record<string, ViewStyle|TextStyle>;
+
+class NotesScreenComponent extends BaseScreenComponent<ComponentProps, State> {
 	private onAppStateChangeSub_: NativeEventSubscription = null;
+	private styles_: Record<number, Styles> = {};
+	private folderPickerOptions_: FolderPickerOptions;
 
-	public constructor() {
-		super();
-
-		this.onAppStateChange_ = async () => {
-			// Force an update to the notes list when app state changes
-			const newProps = Object.assign({}, this.props);
-			newProps.notesSource = '';
-			await this.refreshNotes(newProps);
-		};
-
-		this.sortButton_press = async () => {
-			const buttons = [];
-			const sortNoteOptions = Setting.enumOptions('notes.sortOrder.field');
-
-			const makeCheckboxText = function(selected: boolean, sign: string, label: string) {
-				const s = sign === 'tick' ? '✓' : '⬤';
-				return (selected ? `${s} ` : '') + label;
-			};
-
-			for (const field in sortNoteOptions) {
-				if (!sortNoteOptions.hasOwnProperty(field)) continue;
-				buttons.push({
-					text: makeCheckboxText(Setting.value('notes.sortOrder.field') === field, 'bullet', sortNoteOptions[field]),
-					id: { name: 'notes.sortOrder.field', value: field },
-				});
-			}
-
-			buttons.push({
-				text: makeCheckboxText(Setting.value('notes.sortOrder.reverse'), 'tick', `[ ${Setting.settingMetadata('notes.sortOrder.reverse').label()} ]`),
-				id: { name: 'notes.sortOrder.reverse', value: !Setting.value('notes.sortOrder.reverse') },
-			});
-
-			buttons.push({
-				text: makeCheckboxText(Setting.value('uncompletedTodosOnTop'), 'tick', `[ ${Setting.settingMetadata('uncompletedTodosOnTop').label()} ]`),
-				id: { name: 'uncompletedTodosOnTop', value: !Setting.value('uncompletedTodosOnTop') },
-			});
-
-			buttons.push({
-				text: makeCheckboxText(Setting.value('showCompletedTodos'), 'tick', `[ ${Setting.settingMetadata('showCompletedTodos').label()} ]`),
-				id: { name: 'showCompletedTodos', value: !Setting.value('showCompletedTodos') },
-			});
-
-			const r = await dialogs.pop(this, Setting.settingMetadata('notes.sortOrder.field').label(), buttons);
-			if (!r) return;
-
-			Setting.setValue(r.name, r.value);
-		};
-
-		this.backHandler = () => {
-			if (this.dialogbox && this.dialogbox.state && this.dialogbox.state.isVisible) {
-				this.dialogbox.close();
-				return true;
-			}
-			return false;
-		};
+	public constructor(props: ComponentProps) {
+		super(props);
 	}
+
+	private onAppStateChange_ = async () => {
+		// Force an update to the notes list when app state changes
+		const newProps = { ...this.props };
+		newProps.notesSource = '';
+		await this.refreshNotes(newProps);
+	};
+
+	private sortButton_press = async () => {
+		type IdType = { name: string; value: string|boolean };
+		const buttons: MenuChoice<IdType>[] = [];
+		const sortNoteOptions = Setting.enumOptions('notes.sortOrder.field');
+
+		for (const field in sortNoteOptions) {
+			if (!sortNoteOptions.hasOwnProperty(field)) continue;
+			buttons.push({
+				text: sortNoteOptions[field],
+				iconChecked: 'fas fa-circle',
+				checked: Setting.value('notes.sortOrder.field') === field,
+				id: { name: 'notes.sortOrder.field', value: field },
+			});
+		}
+
+		buttons.push({
+			text: `[ ${Setting.settingMetadata('notes.sortOrder.reverse').label()} ]`,
+			checked: Setting.value('notes.sortOrder.reverse'),
+			id: { name: 'notes.sortOrder.reverse', value: !Setting.value('notes.sortOrder.reverse') },
+		});
+
+		buttons.push({
+			text: `[ ${Setting.settingMetadata('uncompletedTodosOnTop').label()} ]`,
+			checked: Setting.value('uncompletedTodosOnTop'),
+			id: { name: 'uncompletedTodosOnTop', value: !Setting.value('uncompletedTodosOnTop') },
+		});
+
+		buttons.push({
+			text: `[ ${Setting.settingMetadata('showCompletedTodos').label()} ]`,
+			checked: Setting.value('showCompletedTodos'),
+			id: { name: 'showCompletedTodos', value: !Setting.value('showCompletedTodos') },
+		});
+
+		const r = await this.props.dialogManager.showMenu(Setting.settingMetadata('notes.sortOrder.field').label(), buttons);
+		if (!r) return;
+
+		Setting.setValue(r.name, r.value);
+	};
 
 	public styles() {
 		if (!this.styles_) this.styles_ = {};
@@ -97,23 +127,21 @@ class NotesScreenComponent extends BaseScreenComponent<any> {
 	}
 
 	public async componentDidMount() {
-		BackButtonService.addHandler(this.backHandler);
 		await this.refreshNotes();
 		this.onAppStateChangeSub_ = RNAppState.addEventListener('change', this.onAppStateChange_);
 	}
 
 	public async componentWillUnmount() {
 		if (this.onAppStateChangeSub_) this.onAppStateChangeSub_.remove();
-		BackButtonService.removeHandler(this.backHandler);
 	}
 
-	public async componentDidUpdate(prevProps: any) {
-		if (prevProps.notesOrder !== this.props.notesOrder || prevProps.selectedFolderId !== this.props.selectedFolderId || prevProps.selectedTagId !== this.props.selectedTagId || prevProps.selectedSmartFilterId !== this.props.selectedSmartFilterId || prevProps.notesParentType !== this.props.notesParentType) {
+	public async componentDidUpdate(prevProps: Props) {
+		if (prevProps.notesOrder !== this.props.notesOrder || prevProps.selectedFolderId !== this.props.selectedFolderId || prevProps.selectedTagId !== this.props.selectedTagId || prevProps.selectedSmartFilterId !== this.props.selectedSmartFilterId || prevProps.notesParentType !== this.props.notesParentType || prevProps.uncompletedTodosOnTop !== this.props.uncompletedTodosOnTop || prevProps.showCompletedTodos !== this.props.showCompletedTodos) {
 			await this.refreshNotes(this.props);
 		}
 	}
 
-	public async refreshNotes(props: any = null) {
+	public async refreshNotes(props: Props|null = null) {
 		if (props === null) props = this.props;
 
 		const options = {
@@ -132,8 +160,10 @@ class NotesScreenComponent extends BaseScreenComponent<any> {
 		});
 
 		if (source === props.notesSource) return;
+		// For now, search refresh is handled by the search screen.
+		if (props.notesParentType === 'Search') return;
 
-		let notes = [];
+		let notes: NoteEntity[] = [];
 		if (props.notesParentType === 'Folder') {
 			notes = await Note.previews(props.selectedFolderId, options);
 		} else if (props.notesParentType === 'Tag') {
@@ -150,19 +180,23 @@ class NotesScreenComponent extends BaseScreenComponent<any> {
 	}
 
 	public newNoteNavigate = async (folderId: string, isTodo: boolean) => {
-		const newNote = await Note.save({
-			parent_id: folderId,
-			is_todo: isTodo ? 1 : 0,
-		}, { provisional: true });
+		try {
+			const newNote = await Note.save({
+				parent_id: folderId,
+				is_todo: isTodo ? 1 : 0,
+			}, { provisional: true });
 
-		this.props.dispatch({
-			type: 'NAV_GO',
-			routeName: 'Note',
-			noteId: newNote.id,
-		});
+			this.props.dispatch({
+				type: 'NAV_GO',
+				routeName: 'Note',
+				noteId: newNote.id,
+			});
+		} catch (error) {
+			alert(_('Cannot create a new note: %s', error.message));
+		}
 	};
 
-	public parentItem(props: any = null) {
+	public parentItem(props: Props|null = null) {
 		if (!props) props = this.props;
 
 		let output = null;
@@ -181,11 +215,11 @@ class NotesScreenComponent extends BaseScreenComponent<any> {
 
 	public folderPickerOptions() {
 		const options = {
-			enabled: this.props.noteSelectionEnabled,
+			visible: this.props.noteSelectionEnabled,
 			mustSelect: true,
 		};
 
-		if (this.folderPickerOptions_ && options.enabled === this.folderPickerOptions_.enabled) return this.folderPickerOptions_;
+		if (this.folderPickerOptions_ && options.visible === this.folderPickerOptions_.visible) return this.folderPickerOptions_;
 
 		this.folderPickerOptions_ = options;
 		return this.folderPickerOptions_;
@@ -195,14 +229,7 @@ class NotesScreenComponent extends BaseScreenComponent<any> {
 		const parent = this.parentItem();
 		const theme = themeStyle(this.props.themeId);
 
-		const rootStyle = {
-			flex: 1,
-			backgroundColor: theme.backgroundColor,
-		};
-
-		if (!this.props.visible) {
-			rootStyle.flex = 0.001; // This is a bit of a hack but it seems to work fine - it makes the component invisible but without unmounting it
-		}
+		const rootStyle = this.props.visible ? theme.rootStyle : theme.hiddenRootStyle;
 
 		const title = parent ? parent.title : null;
 		if (!parent) {
@@ -220,51 +247,59 @@ class NotesScreenComponent extends BaseScreenComponent<any> {
 		if (!buttonFolderId) buttonFolderId = this.props.activeFolderId;
 
 		const addFolderNoteButtons = !!buttonFolderId;
-		const thisComp = this;
 
 		const makeActionButtonComp = () => {
+			if ((this.props.notesParentType === 'Folder' && itemIsInTrash(parent)) || !Folder.atLeastOneRealFolderExists(this.props.folders)) return null;
+
 			if (addFolderNoteButtons && this.props.folders.length > 0) {
 				const buttons = [];
 				buttons.push({
 					label: _('New to-do'),
-					onPress: () => {
+					onPress: async () => {
 						const isTodo = true;
 						void this.newNoteNavigate(buttonFolderId, isTodo);
 					},
 					color: '#9b59b6',
-					icon: 'md-checkbox-outline',
+					icon: 'checkbox-outline',
 				});
 
 				buttons.push({
 					label: _('New note'),
-					onPress: () => {
+					onPress: async () => {
 						const isTodo = false;
 						void this.newNoteNavigate(buttonFolderId, isTodo);
 					},
 					color: '#9b59b6',
-					icon: 'md-document',
+					icon: 'document',
 				});
-				return <ActionButton buttons={buttons}/>;
+				return <ActionButton buttons={buttons} dispatch={this.props.dispatch}/>;
 			}
 			return null;
 		};
 
 		const actionButtonComp = this.props.noteSelectionEnabled || !this.props.visible ? null : makeActionButtonComp();
 
+		// Ensure that screen readers can't focus the notes list when it isn't visible.
+		const accessibilityHidden = !this.props.visible;
+
 		return (
-			<View style={rootStyle}>
-				<ScreenHeader title={iconString + title} showBackButton={false} parentComponent={thisComp} sortButton_press={this.sortButton_press} folderPickerOptions={this.folderPickerOptions()} showSearchButton={true} showSideMenuButton={true} />
-				<NoteList style={this.styles().noteList} />
+			<AccessibleView
+				style={rootStyle}
+
+				inert={accessibilityHidden}
+			>
+				<ScreenHeader title={iconString + title} showBackButton={false} sortButton_press={this.sortButton_press} folderPickerOptions={this.folderPickerOptions()} showSearchButton={true} showSideMenuButton={true} />
+				<NoteList />
 				{actionButtonComp}
-				<DialogBox
-					ref={(dialogbox: any) => {
-						this.dialogbox = dialogbox;
-					}}
-				/>
-			</View>
+			</AccessibleView>
 		);
 	}
 }
+
+const NotesScreenWrapper: React.FC<Props> = props => {
+	const dialogManager = useContext(DialogContext);
+	return <NotesScreenComponent {...props} dialogManager={dialogManager}/>;
+};
 
 const NotesScreen = connect((state: AppState) => {
 	return {
@@ -284,6 +319,6 @@ const NotesScreen = connect((state: AppState) => {
 		noteSelectionEnabled: state.noteSelectionEnabled,
 		notesOrder: stateUtils.notesOrder(state.settings),
 	};
-})(NotesScreenComponent as any);
+})(NotesScreenWrapper);
 
-export default NotesScreen as any;
+export default NotesScreen;

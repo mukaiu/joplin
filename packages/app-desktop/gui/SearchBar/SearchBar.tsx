@@ -8,6 +8,7 @@ import uuid from '@joplin/lib/uuid';
 const { connect } = require('react-redux');
 import Note from '@joplin/lib/models/Note';
 import { AppState } from '../../app.reducer';
+import { blur, focus } from '@joplin/lib/utils/focusHandler';
 const debounce = require('debounce');
 const styled = require('styled-components').default;
 
@@ -19,8 +20,10 @@ export const Root = styled.div`
 `;
 
 interface Props {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	inputRef?: any;
 	notesParentType: string;
+	// eslint-disable-next-line @typescript-eslint/ban-types -- Old code before rule was applied
 	dispatch?: Function;
 	selectedNoteId: string;
 	isFocused?: boolean;
@@ -32,6 +35,7 @@ function SearchBar(props: Props) {
 	const searchId = useRef(uuid.create());
 
 	useEffect(() => {
+		// eslint-disable-next-line @typescript-eslint/ban-types -- Old code before rule was applied
 		function search(searchId: string, query: string, dispatch: Function) {
 			dispatch({
 				type: 'SEARCH_UPDATE',
@@ -84,6 +88,7 @@ function SearchBar(props: Props) {
 		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [props.selectedNoteId]);
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	function onChange(event: any) {
 		if (event.value.length === 0) {
 			// Revert to previous state if query string becomes empty
@@ -113,9 +118,11 @@ function SearchBar(props: Props) {
 		}, 300);
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	const onKeyDown = useCallback((event: any) => {
 		if (event.key === 'Escape') {
-			if (document.activeElement) (document.activeElement as any).blur();
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
+			if (document.activeElement) blur('SearchBar::onKeyDown', document.activeElement as any);
 			void onExitSearch();
 		}
 	}, [onExitSearch]);
@@ -125,7 +132,7 @@ function SearchBar(props: Props) {
 			void onExitSearch();
 		} else {
 			setSearchStarted(true);
-			props.inputRef.current.focus();
+			focus('SearchBar::onSearchButtonClick', props.inputRef.current);
 			props.dispatch({
 				type: 'FOCUS_SET',
 				field: 'globalSearch',

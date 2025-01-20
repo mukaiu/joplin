@@ -1,5 +1,5 @@
 import Setting from './models/Setting';
-import Logger from './Logger';
+import Logger from '@joplin/utils/Logger';
 import Api, { RequestFile } from './services/rest/Api';
 import ApiResponse from './services/rest/ApiResponse';
 const urlParser = require('url');
@@ -17,9 +17,11 @@ export default class ClipperServer {
 
 	private logger_: Logger;
 	private startState_: StartState = StartState.Idle;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	private server_: any = null;
 	private port_: number = null;
 	private api_: Api = null;
+	// eslint-disable-next-line @typescript-eslint/ban-types -- Old code before rule was applied
 	private dispatch_: Function;
 
 	private static instance_: ClipperServer = null;
@@ -38,9 +40,11 @@ export default class ClipperServer {
 		return this.api_;
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	public initialize(actionApi: any = null) {
 		this.api_ = new Api(() => {
 			return Setting.value('api.token');
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 		}, (action: any) => { this.dispatch(action); }, actionApi);
 	}
 
@@ -52,10 +56,12 @@ export default class ClipperServer {
 		return this.logger_;
 	}
 
+	// eslint-disable-next-line @typescript-eslint/ban-types -- Old code before rule was applied
 	public setDispatch(d: Function) {
 		this.dispatch_ = d;
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 	public dispatch(action: any) {
 		if (!this.dispatch_) throw new Error('dispatch not set!');
 		this.dispatch_(action);
@@ -112,38 +118,41 @@ export default class ClipperServer {
 		} catch (error) {
 			this.setStartState(StartState.Idle);
 			this.logger().error(error);
-			return;
+			return null;
 		}
 
 		this.server_ = require('http').createServer();
 
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 		this.server_.on('request', async (request: any, response: any) => {
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 			const writeCorsHeaders = (code: any, contentType = 'application/json', additionalHeaders: any = null) => {
-				const headers = Object.assign(
-					{},
-					{
-						'Content-Type': contentType,
-						'Access-Control-Allow-Origin': '*',
-						'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, PATCH, DELETE',
-						'Access-Control-Allow-Headers': 'X-Requested-With,content-type',
-					},
-					additionalHeaders ? additionalHeaders : {}
-				);
+				const headers = {
+
+					'Content-Type': contentType,
+					'Access-Control-Allow-Origin': '*',
+					'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, PATCH, DELETE',
+					'Access-Control-Allow-Headers': 'X-Requested-With,content-type',
+					...(additionalHeaders ? additionalHeaders : {}),
+				};
 				response.writeHead(code, headers);
 			};
 
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 			const writeResponseJson = (code: any, object: any) => {
 				writeCorsHeaders(code);
 				response.write(JSON.stringify(object));
 				response.end();
 			};
 
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 			const writeResponseText = (code: any, text: any) => {
 				writeCorsHeaders(code, 'text/plain');
 				response.write(text);
 				response.end();
 			};
 
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 			const writeResponseInstance = (code: any, instance: any) => {
 				if (instance.type === 'attachment') {
 					const filename = instance.attachmentFilename ? instance.attachmentFilename : 'file';
@@ -157,6 +166,7 @@ export default class ClipperServer {
 				}
 			};
 
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 			const writeResponse = (code: any, response: any) => {
 				if (response instanceof ApiResponse) {
 					writeResponseInstance(code, response);
@@ -173,6 +183,7 @@ export default class ClipperServer {
 
 			const url = urlParser.parse(request.url, true);
 
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 			const execRequest = async (request: any, body = '', files: RequestFile[] = []) => {
 				try {
 					const response = await this.api_.route(request.method, url.pathname, url.query, body, files);
@@ -198,6 +209,7 @@ export default class ClipperServer {
 				if (contentType.indexOf('multipart/form-data') === 0) {
 					const form = new multiparty.Form();
 
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 					form.parse(request, (error: any, fields: any, files: any) => {
 						if (error) {
 							writeResponse(error.httpCode ? error.httpCode : 500, error.message);
@@ -210,6 +222,7 @@ export default class ClipperServer {
 					if (request.method === 'POST' || request.method === 'PUT') {
 						let body = '';
 
+						// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 						request.on('data', (data: any) => {
 							body += data;
 						});

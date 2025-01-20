@@ -2,9 +2,10 @@ import { User } from '../../services/database/types';
 import routeHandler from '../../middleware/routeHandler';
 import { execRequest } from '../../utils/testing/apiUtils';
 import { beforeAllDb, afterAllTests, beforeEachDb, koaAppContext, createUserAndSession, models, checkContextError, expectHttpError } from '../../utils/testing/testUtils';
-import uuidgen from '../../utils/uuidgen';
+import { uuidgen } from '@joplin/lib/uuid';
 import { ErrorForbidden } from '../../utils/errors';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 async function postUser(sessionId: string, email: string, password: string = null, props: any = null): Promise<User> {
 	password = password === null ? uuidgen() : password;
 
@@ -28,7 +29,8 @@ async function postUser(sessionId: string, email: string, password: string = nul
 	return context.response.body;
 }
 
-async function patchUser(sessionId: string, user: any, url: string = ''): Promise<User> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
+async function patchUser(sessionId: string, user: any, url = ''): Promise<User> {
 	const context = await koaAppContext({
 		sessionId: sessionId,
 		request: {
